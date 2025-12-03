@@ -1,21 +1,12 @@
-import { useMemo, Suspense, lazy } from "react";
+import { useMemo } from "react";
 import { Map, Github } from "lucide-react";
+import MapView from "@/components/MapView";
 import RouteInputPanel from "@/components/RouteInputPanel";
 import RouteDetailsPanel from "@/components/RouteDetailsPanel";
 import RouteList from "@/components/RouteList";
 import { RouteListSkeleton, RouteDetailsSkeleton } from "@/components/LoadingSkeleton";
 import { useRoutes } from "@/hooks/useRoutes";
 import { Coordinates } from "@/types/route";
-import { Skeleton } from "@/components/ui/skeleton";
-
-// Lazy load MapView to avoid SSR issues with Leaflet
-const MapView = lazy(() => import("@/components/MapView"));
-
-const MapFallback = () => (
-  <div className="flex h-full w-full items-center justify-center rounded-lg bg-muted">
-    <Skeleton className="h-full w-full" />
-  </div>
-);
 
 const Index = () => {
   const {
@@ -27,7 +18,6 @@ const Index = () => {
     clearRoutes,
   } = useRoutes();
 
-  // Extract origin and destination from selected route
   const { origin, destination } = useMemo(() => {
     if (!selectedRoute || !selectedRoute.properties.waypoints?.length) {
       return { origin: null, destination: null };
@@ -105,14 +95,12 @@ const Index = () => {
 
         {/* Map Container */}
         <main className="relative flex-1 p-4">
-          <Suspense fallback={<MapFallback />}>
-            <MapView
-              routes={routes}
-              selectedRoute={selectedRoute}
-              origin={origin}
-              destination={destination}
-            />
-          </Suspense>
+          <MapView
+            routes={routes}
+            selectedRoute={selectedRoute}
+            origin={origin}
+            destination={destination}
+          />
 
           {/* Map overlay info */}
           {routes.length === 0 && status === "idle" && (
