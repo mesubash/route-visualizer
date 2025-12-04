@@ -1,22 +1,25 @@
-import { useMemo } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { Map, Github } from "lucide-react";
 import MapView from "@/components/MapView";
-import RouteInputPanel from "@/components/RouteInputPanel";
 import RouteDetailsPanel from "@/components/RouteDetailsPanel";
 import RouteList from "@/components/RouteList";
-import { RouteListSkeleton, RouteDetailsSkeleton } from "@/components/LoadingSkeleton";
+import DrawingControls from "@/components/DrawingControls";
 import { useRoutes } from "@/hooks/useRoutes";
 import { Coordinates } from "@/types/route";
+import { toast } from "@/hooks/use-toast";
 
 const Index = () => {
   const {
     routes,
     selectedRoute,
-    status,
-    fetchRouteData,
     selectRoute,
-    clearRoutes,
+    addRoute,
   } = useRoutes();
+
+  // Drawing state
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [drawnPoints, setDrawnPoints] = useState<Coordinates[]>([]);
+  const [routeName, setRouteName] = useState("");
 
   const { origin, destination } = useMemo(() => {
     if (!selectedRoute || !selectedRoute.properties.waypoints?.length) {
@@ -33,7 +36,39 @@ const Index = () => {
     };
   }, [selectedRoute]);
 
-  const isLoading = status === "loading";
+  const handleMapClick = useCallback((coords: Coordinates) => {
+    setDrawnPoints((prev) => [...prev, coords]);
+  }, []);
+
+  const handleToggleDrawing = useCallback(() => {
+    setIsDrawing((prev) => !prev);
+    if (isDrawing) {
+      setDrawnPoints([]);
+      setRouteName("");
+    }
+  }, [isDrawing]);
+
+  const handleClearPoints = useCallback(() => {
+    setDrawnPoints([]);
+  }, []);
+
+  const handleUndoLastPoint = useCallback(() => {
+    setDrawnPoints((prev) => prev.slice(0, -1));
+  }, []);
+
+  const handleSaveRoute = useCallback(() => {
+    if (drawnPoints.length < 2 || !routeName.trim()) return;
+
+    addRoute(routeName.trim(), drawnPoints);
+    toast({
+      title: "Route Created",
+      description: `"${routeName}" has been added to your routes.`,
+    });
+
+    setIsDrawing(false);
+    setDrawnPoints([]);
+    setRouteName("");
+  }, [drawnPoints, routeName, addRoute]);
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background">
@@ -46,7 +81,7 @@ const Index = () => {
           <div>
             <h1 className="text-lg font-semibold tracking-tight">RouteViz</h1>
             <p className="text-xs text-muted-foreground">
-              PostGIS Route Visualization
+              Route Visualization
             </p>
           </div>
         </div>
@@ -64,20 +99,18 @@ const Index = () => {
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <aside className="flex w-80 shrink-0 flex-col gap-4 overflow-y-auto border-r bg-muted/30 p-4 lg:w-96">
-          <RouteInputPanel
-            onFetchRoute={fetchRouteData}
-            onClear={clearRoutes}
-            status={status}
+          <DrawingControls
+            isDrawing={isDrawing}
+            drawnPoints={drawnPoints}
+            routeName={routeName}
+            onToggleDrawing={handleToggleDrawing}
+            onClearPoints={handleClearPoints}
+            onSaveRoute={handleSaveRoute}
+            onRouteNameChange={setRouteName}
+            onUndoLastPoint={handleUndoLastPoint}
           />
 
-          {isLoading && (
-            <>
-              <RouteListSkeleton />
-              <RouteDetailsSkeleton />
-            </>
-          )}
-
-          {!isLoading && routes.length > 0 && (
+          {routes.length > 0 && (
             <>
               <RouteList
                 routes={routes}
@@ -88,8 +121,10 @@ const Index = () => {
             </>
           )}
 
-          {!isLoading && routes.length === 0 && status !== "idle" && (
-            <RouteDetailsPanel route={null} />
+          {routes.length === 0 && !isDrawing && (
+            <div className="flex flex-1 items-center justify-center text-center text-sm text-muted-foreground">
+              <p>No routes yet. Start drawing to create one!</p>
+            </div>
           )}
         </aside>
 
@@ -100,16 +135,19 @@ const Index = () => {
             selectedRoute={selectedRoute}
             origin={origin}
             destination={destination}
+            isDrawing={isDrawing}
+            drawnPoints={drawnPoints}
+            onMapClick={handleMapClick}
           />
 
           {/* Map overlay info */}
-          {routes.length === 0 && status === "idle" && (
+          {routes.length === 0 && !isDrawing && (
             <div className="absolute left-1/2 top-1/2 z-[1000] -translate-x-1/2 -translate-y-1/2 rounded-lg border bg-card/95 p-6 text-center shadow-floating backdrop-blur">
               <Map className="mx-auto mb-3 h-10 w-10 text-primary/60" />
               <h2 className="text-lg font-semibold">Welcome to RouteViz</h2>
               <p className="mt-1 max-w-xs text-sm text-muted-foreground">
-                Enter origin and destination coordinates in the sidebar to
-                visualize routes from your PostGIS database.
+                Click "Start Drawing" in the sidebar to create your first route
+                by clicking points on the map.
               </p>
             </div>
           )}
