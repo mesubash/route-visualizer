@@ -1,9 +1,11 @@
-import { Pencil, Trash2, Save, X } from "lucide-react";
+import { Pencil, Trash2, Save, X, LogIn, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Coordinates } from "@/types/route";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface DrawingControlsProps {
   isDrawing: boolean;
@@ -26,6 +28,8 @@ export default function DrawingControls({
   onRouteNameChange,
   onUndoLastPoint,
 }: DrawingControlsProps) {
+  const { isLoggedIn, isAdminUser, openLoginDialog } = useAuth();
+
   return (
     <Card className="shadow-card animate-fade-in">
       <CardHeader className="pb-3">
@@ -36,10 +40,34 @@ export default function DrawingControls({
       </CardHeader>
       <CardContent className="space-y-4">
         {!isDrawing ? (
-          <Button onClick={onToggleDrawing} className="w-full">
-            <Pencil className="mr-2 h-4 w-4" />
-            Start Drawing
-          </Button>
+          <>
+            {!isLoggedIn && (
+              <Alert className="mb-3">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-xs">
+                  Sign in as admin to save routes permanently. You can still draw routes locally.
+                </AlertDescription>
+              </Alert>
+            )}
+            {isLoggedIn && !isAdminUser && (
+              <Alert variant="destructive" className="mb-3">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-xs">
+                  Admin role required to save routes. Routes will only be saved locally.
+                </AlertDescription>
+              </Alert>
+            )}
+            <Button onClick={onToggleDrawing} className="w-full">
+              <Pencil className="mr-2 h-4 w-4" />
+              Start Drawing
+            </Button>
+            {!isLoggedIn && (
+              <Button variant="outline" onClick={openLoginDialog} className="w-full">
+                <LogIn className="mr-2 h-4 w-4" />
+                Sign in to Save Permanently
+              </Button>
+            )}
+          </>
         ) : (
           <>
             <div className="space-y-2">
@@ -104,7 +132,7 @@ export default function DrawingControls({
                 className="flex-1"
               >
                 <Save className="mr-2 h-4 w-4" />
-                Save
+                {isLoggedIn && isAdminUser ? "Save" : "Save Locally"}
               </Button>
             </div>
           </>

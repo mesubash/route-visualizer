@@ -1,8 +1,10 @@
-import { Edit3, Check, X, Plus, Trash2 } from "lucide-react";
+import { Edit3, Check, X, Trash2, AlertCircle, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Coordinates } from "@/types/route";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface EditRouteControlsProps {
   isEditing: boolean;
@@ -27,6 +29,8 @@ export default function EditRouteControls({
   onClearPoints,
   hasSelectedRoute,
 }: EditRouteControlsProps) {
+  const { isLoggedIn, isAdminUser, openLoginDialog } = useAuth();
+
   if (!hasSelectedRoute) return null;
 
   return (
@@ -39,10 +43,34 @@ export default function EditRouteControls({
       </CardHeader>
       <CardContent className="space-y-3">
         {!isEditing ? (
-          <Button onClick={onStartEdit} variant="outline" className="w-full">
-            <Edit3 className="mr-2 h-4 w-4" />
-            Edit "{routeName}"
-          </Button>
+          <>
+            {!isLoggedIn && (
+              <Alert className="mb-3">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-xs">
+                  Sign in as admin to save edits to the server. Changes will only be local otherwise.
+                </AlertDescription>
+              </Alert>
+            )}
+            {isLoggedIn && !isAdminUser && (
+              <Alert variant="destructive" className="mb-3">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-xs">
+                  Admin role required to edit routes on server.
+                </AlertDescription>
+              </Alert>
+            )}
+            <Button onClick={onStartEdit} variant="outline" className="w-full">
+              <Edit3 className="mr-2 h-4 w-4" />
+              Edit "{routeName}"
+            </Button>
+            {!isLoggedIn && (
+              <Button variant="ghost" size="sm" onClick={openLoginDialog} className="w-full">
+                <LogIn className="mr-2 h-4 w-4" />
+                Sign in for Server Edits
+              </Button>
+            )}
+          </>
         ) : (
           <>
             <div className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-600 dark:text-amber-400">
@@ -89,7 +117,7 @@ export default function EditRouteControls({
                 className="flex-1"
               >
                 <Check className="mr-1 h-4 w-4" />
-                Save
+                {isLoggedIn && isAdminUser ? "Save" : "Save Locally"}
               </Button>
             </div>
           </>
