@@ -15,6 +15,7 @@ interface UseRoutesReturn {
   ) => Promise<void>;
   selectRoute: (routeId: string) => void;
   addRoute: (name: string, points: Coordinates[]) => void;
+  updateRoute: (routeId: string, points: Coordinates[]) => void;
   deleteRoute: (routeId: string) => void;
   clearRoutes: () => void;
 }
@@ -114,6 +115,57 @@ export function useRoutes(): UseRoutesReturn {
     setSelectedRoute(newRoute);
   }, []);
 
+  const updateRoute = useCallback((routeId: string, points: Coordinates[]) => {
+    const distance = calculateDistance(points);
+    const duration = (distance / 1000) * 72;
+
+    setRoutes((prev) =>
+      prev.map((route) => {
+        if (route.properties.id !== routeId) return route;
+        return {
+          ...route,
+          geometry: {
+            ...route.geometry,
+            coordinates: points.map((p) => [p.lng, p.lat] as [number, number]),
+          },
+          properties: {
+            ...route.properties,
+            distance,
+            duration,
+            waypoints: points.map((p, i) => ({
+              lat: p.lat,
+              lng: p.lng,
+              name: i === 0 ? "Start" : i === points.length - 1 ? "End" : `Point ${i + 1}`,
+              order: i,
+            })),
+          },
+        };
+      })
+    );
+
+    setSelectedRoute((prev) => {
+      if (prev?.properties.id !== routeId) return prev;
+      return {
+        ...prev,
+        geometry: {
+          ...prev.geometry,
+          coordinates: points.map((p) => [p.lng, p.lat] as [number, number]),
+        },
+        properties: {
+          ...prev.properties,
+          distance,
+          duration,
+          waypoints: points.map((p, i) => ({
+            lat: p.lat,
+            lng: p.lng,
+            name: i === 0 ? "Start" : i === points.length - 1 ? "End" : `Point ${i + 1}`,
+            order: i,
+          })),
+        },
+      };
+    });
+  }, []);
+
   const deleteRoute = useCallback((routeId: string) => {
     setRoutes((prev) => prev.filter((r) => r.properties.id !== routeId));
     setSelectedRoute((prev) => (prev?.properties.id === routeId ? null : prev));
@@ -132,6 +184,7 @@ export function useRoutes(): UseRoutesReturn {
     fetchRouteData,
     selectRoute,
     addRoute,
+    updateRoute,
     deleteRoute,
     clearRoutes,
   };
