@@ -49,7 +49,7 @@ npm run dev
 Create a `.env` file with:
 
 ```sh
-VITE_API_BASE_URL=https://api.himalayanguardian.com
+VITE_API_BASE_URL=
 ```
 
 ## Development
