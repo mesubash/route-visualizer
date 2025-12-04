@@ -1,73 +1,86 @@
-# Welcome to your Lovable project
+# Route Visualizer
 
-## Project info
+A modern React application for visualizing trekking routes across Nepal using OpenStreetMap and PostGIS spatial data.
 
-**URL**: https://lovable.dev/projects/d93b6d90-c704-4550-81ca-6d8c6c4e1ef0
+## Features
 
-## How can I edit this code?
+- 🗺️ Interactive map visualization with Leaflet
+- 🔍 Search and filter routes by region, difficulty, and altitude
+- ✏️ Create and edit routes (admin functionality)
+- 📊 Route statistics and details panel
+- 🔐 Authentication for admin operations
 
-There are several ways of editing your application.
+## Tech Stack
 
-**Use Lovable**
+- **Frontend**: React + TypeScript + Vite
+- **UI Components**: shadcn/ui + Tailwind CSS
+- **Maps**: Leaflet + OpenStreetMap
+- **State Management**: React Query
+- **API**: REST API with PostGIS backend
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/d93b6d90-c704-4550-81ca-6d8c6c4e1ef0) and start prompting.
+## Getting Started
 
-Changes made via Lovable will be committed automatically to this repo.
+### Prerequisites
 
-**Use your preferred IDE**
+- Node.js 18+ & npm
+- Git
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+### Installation
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
+# Clone the repository
 git clone <YOUR_GIT_URL>
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# Navigate to project directory
+cd route-visualizer
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Install dependencies
+npm install
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Create environment file
+cp .env.example .env
+
+# Start development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### Environment Variables
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Create a `.env` file with:
 
-**Use GitHub Codespaces**
+```sh
+VITE_API_BASE_URL=https://api.himalayanguardian.com
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Development
 
-## What technologies are used for this project?
+```sh
+# Start dev server
+npm run dev
 
-This project is built with:
+# Build for production
+npm run build
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+# Preview production build
+npm run preview
 
-## How can I deploy this project?
+# Lint code
+npm run lint
+```
 
-Simply open [Lovable](https://lovable.dev/projects/d93b6d90-c704-4550-81ca-6d8c6c4e1ef0) and click on Share -> Publish.
+## Project Structure
 
-## Can I connect a custom domain to my Lovable project?
+```txt
+src/
+├── components/     # React components
+├── contexts/       # React contexts (Auth)
+├── hooks/          # Custom hooks
+├── lib/            # Utilities and API
+├── pages/          # Page components
+├── types/          # TypeScript types
+└── App.tsx         # Main app component
+```
 
-Yes, you can!
+## License
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+MIT

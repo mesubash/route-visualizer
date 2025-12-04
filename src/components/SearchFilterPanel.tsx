@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { DifficultyLevel, RouteSearchParams } from "@/types/route";
+import { getPublicRegions } from "@/lib/api";
 
 interface SearchFilterPanelProps {
   onSearch: (params: RouteSearchParams) => void;
@@ -64,20 +65,14 @@ export default function SearchFilterPanel({
   const [sortBy, setSortBy] = useState("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-  // Fetch regions from routes
+  // Fetch regions from public endpoint
   useEffect(() => {
     const fetchRegions = async () => {
       setRegionsLoading(true);
       try {
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://api.himalayanguardian.com";
-        const response = await fetch(`${API_BASE_URL}/api/routes/all`);
-        const data = await response.json();
-        if (data.success && data.data) {
-          // Extract unique regions from routes
-          const uniqueRegions = [...new Set(data.data.map((r: { region: string }) => r.region))]
-            .filter(Boolean)
-            .sort() as string[];
-          setRegions(uniqueRegions);
+        const response = await getPublicRegions();
+        if (response.success && response.data) {
+          setRegions(response.data.sort());
         }
       } catch (error) {
         console.error("Failed to fetch regions:", error);
@@ -110,12 +105,18 @@ export default function SearchFilterPanel({
       search: searchText || undefined,
       region: region || undefined,
       difficultyLevel: difficulty || undefined,
+      // For altitude filtering: minAltitude filters routes with maxAltitude >= value
+      // maxAltitude filters routes with maxAltitude <= value
       minAltitude: altitudeRange[0] > 0 ? altitudeRange[0] : undefined,
       maxAltitude: altitudeRange[1] < 9000 ? altitudeRange[1] : undefined,
       sortBy,
       sortDir,
       size: 50,
     };
+    
+    // Log search params for debugging
+    console.log("Search params:", params);
+    
     onSearch(params);
   }, [searchText, region, difficulty, altitudeRange, sortBy, sortDir, onSearch]);
 
@@ -234,7 +235,7 @@ export default function SearchFilterPanel({
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Label className="text-xs text-muted-foreground">
-                Altitude Range
+                Max Altitude Range
               </Label>
               <span className="text-xs font-medium">
                 {altitudeRange[0].toLocaleString()}m -{" "}
@@ -249,6 +250,9 @@ export default function SearchFilterPanel({
               step={100}
               className="py-2"
             />
+            <p className="text-[10px] text-muted-foreground">
+              Filter routes by their maximum altitude
+            </p>
           </div>
 
           {/* Sort Options */}

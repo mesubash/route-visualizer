@@ -5,6 +5,7 @@ import {
   Coordinates,
   RouteSearchParams,
   RouteRequest,
+  DifficultyLevel,
   routeResponseToFeature,
 } from "@/types/route";
 import {
@@ -16,6 +17,23 @@ import {
 } from "@/lib/api";
 import { isAuthenticated } from "@/lib/auth";
 import { toast } from "@/hooks/use-toast";
+
+// Route creation options with all required API fields
+export interface RouteCreateOptions {
+  name: string;
+  region: string;
+  minAltitude: number;
+  maxAltitude: number;
+  difficultyLevel: DifficultyLevel;
+  description?: string;
+  trekName?: string;
+  durationDays?: number;
+}
+
+// Options for the useRoutes hook
+export interface UseRoutesOptions {
+  onAuthRequired?: () => void;
+}
 
 interface UseRoutesReturn {
   routes: RouteFeature[];
@@ -30,11 +48,14 @@ interface UseRoutesReturn {
   fetchRoutesWithSearch: (params: RouteSearchParams) => Promise<void>;
   selectRoute: (routeId: string) => void;
   addRoute: (
-    name: string,
     points: Coordinates[],
-    region?: string
+    options: RouteCreateOptions
   ) => Promise<boolean>;
-  updateRoute: (routeId: string, points: Coordinates[]) => Promise<boolean>;
+  updateRoute: (
+    routeId: string,
+    points: Coordinates[],
+    options?: Partial<RouteCreateOptions>
+  ) => Promise<boolean>;
   deleteRoute: (routeId: string) => Promise<boolean>;
   clearRoutes: () => void;
   requiresAuth: () => boolean;
@@ -57,7 +78,8 @@ function calculateDistance(coords: Coordinates[]): number {
   return total;
 }
 
-export function useRoutes(): UseRoutesReturn {
+export function useRoutes(options?: UseRoutesOptions): UseRoutesReturn {
+  const { onAuthRequired } = options || {};
   const [routes, setRoutes] = useState<RouteFeature[]>([]);
   const [selectedRoute, setSelectedRoute] = useState<RouteFeature | null>(null);
   const [status, setStatus] = useState<RouteStatus>("idle");
@@ -142,50 +164,30 @@ export function useRoutes(): UseRoutesReturn {
 
   const addRoute = useCallback(
     async (
-      name: string,
       points: Coordinates[],
-      region: string = "Custom"
+      options: RouteCreateOptions
     ): Promise<boolean> => {
+      const {
+        name,
+        region,
+        minAltitude,
+        maxAltitude,
+        difficultyLevel,
+        description,
+        trekName,
+        durationDays,
+      } = options;
+
       // Check if authenticated for API call
       if (!isAuthenticated()) {
-        // Add locally only (will be lost on refresh)
-        const distance = calculateDistance(points);
-        const duration = (distance / 1000) * 72;
-
-        const newRoute: RouteFeature = {
-          type: "Feature",
-          geometry: {
-            type: "LineString",
-            coordinates: points.map((p) => [p.lng, p.lat]),
-          },
-          properties: {
-            id: `local-route-${Date.now()}`,
-            distance,
-            duration,
-            routeName: name,
-            roadType: "Custom",
-            waypoints: points.map((p, i) => ({
-              lat: p.lat,
-              lng: p.lng,
-              name:
-                i === 0
-                  ? "Start"
-                  : i === points.length - 1
-                  ? "End"
-                  : `Point ${i + 1}`,
-              order: i,
-            })),
-            createdAt: new Date().toISOString(),
-          },
-        };
-
-        setRoutes((prev) => [...prev, newRoute]);
-        setSelectedRoute(newRoute);
+        // Prompt for login
         toast({
-          title: "Route Added Locally",
-          description: "Sign in as admin to save routes permanently.",
+          title: "Authentication Required",
+          description: "Please sign in to create routes.",
+          variant: "destructive",
         });
-        return true;
+        onAuthRequired?.();
+        return false;
       }
 
       // Make API call to create route
@@ -194,11 +196,16 @@ export function useRoutes(): UseRoutesReturn {
         const routeRequest: RouteRequest = {
           name,
           region,
-          maxAltitude: 0, // Default, could be calculated from elevation data
+          minAltitude,
+          maxAltitude,
+          difficultyLevel,
           distanceKm: distance / 1000,
           geometryCoordinates: points.map(
             (p) => [p.lng, p.lat] as [number, number]
           ),
+          description,
+          trekName,
+          durationDays,
           isActive: true,
         };
 
@@ -214,30 +221,62 @@ export function useRoutes(): UseRoutesReturn {
           });
           return true;
         } else {
-          throw new Error("Failed to create route");
+          // Check if it's an auth error and prompt for re-login
+          if (
+            response.message?.toLowerCase().includes("unauthorized") ||
+            response.message?.toLowerCase().includes("not authenticated") ||
+            response.message?.toLowerCase().includes("401")
+          ) {
+            toast({
+              title: "Session Expired",
+              description: "Please sign in again to continue.",
+              variant: "destructive",
+            });
+            onAuthRequired?.();
+            return false;
+          }
+          // Use the message from the API response if available
+          throw new Error(response.message || "Failed to create route");
         }
       } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to create route";
+        // Check for auth-related errors
+        if (
+          errorMessage.toLowerCase().includes("unauthorized") ||
+          errorMessage.toLowerCase().includes("401")
+        ) {
+          toast({
+            title: "Session Expired",
+            description: "Please sign in again to continue.",
+            variant: "destructive",
+          });
+          onAuthRequired?.();
+          return false;
+        }
         toast({
           title: "Error",
-          description:
-            err instanceof Error ? err.message : "Failed to create route",
+          description: errorMessage,
           variant: "destructive",
         });
         return false;
       }
     },
-    []
+    [onAuthRequired]
   );
 
   const updateRoute = useCallback(
-    async (routeId: string, points: Coordinates[]): Promise<boolean> => {
+    async (
+      routeId: string,
+      points: Coordinates[],
+      options?: Partial<RouteCreateOptions>
+    ): Promise<boolean> => {
       const distance = calculateDistance(points);
-      const duration = (distance / 1000) * 72;
       const existingRoute = routes.find((r) => r.properties.id === routeId);
 
-      // Check if this is a local route or if not authenticated
-      if (!isAuthenticated() || routeId.startsWith("local-")) {
-        // Update locally only
+      // Check if this is a local route (allow updates to local routes without auth)
+      if (routeId.startsWith("local-")) {
+        const duration = (distance / 1000) * 72;
         setRoutes((prev) =>
           prev.map((route) => {
             if (route.properties.id !== routeId) return route;
@@ -253,6 +292,15 @@ export function useRoutes(): UseRoutesReturn {
                 ...route.properties,
                 distance,
                 duration,
+                routeName: options?.name || route.properties.routeName,
+                roadType: options?.difficultyLevel || route.properties.roadType,
+                region: options?.region || route.properties.region,
+                minAltitude:
+                  options?.minAltitude ?? route.properties.minAltitude,
+                maxAltitude:
+                  options?.maxAltitude ?? route.properties.maxAltitude,
+                description:
+                  options?.description || route.properties.description,
                 waypoints: points.map((p, i) => ({
                   lat: p.lat,
                   lng: p.lng,
@@ -283,6 +331,12 @@ export function useRoutes(): UseRoutesReturn {
               ...prev.properties,
               distance,
               duration,
+              routeName: options?.name || prev.properties.routeName,
+              roadType: options?.difficultyLevel || prev.properties.roadType,
+              region: options?.region || prev.properties.region,
+              minAltitude: options?.minAltitude ?? prev.properties.minAltitude,
+              maxAltitude: options?.maxAltitude ?? prev.properties.maxAltitude,
+              description: options?.description || prev.properties.description,
               waypoints: points.map((p, i) => ({
                 lat: p.lat,
                 lng: p.lng,
@@ -297,26 +351,46 @@ export function useRoutes(): UseRoutesReturn {
             },
           };
         });
-
-        if (!routeId.startsWith("local-")) {
-          toast({
-            title: "Route Updated Locally",
-            description: "Sign in as admin to save changes permanently.",
-          });
-        }
         return true;
+      }
+
+      // For server routes, require authentication
+      if (!isAuthenticated()) {
+        toast({
+          title: "Authentication Required",
+          description: "Please sign in to update routes.",
+          variant: "destructive",
+        });
+        onAuthRequired?.();
+        return false;
       }
 
       // Make API call to update route
       try {
         const routeRequest: RouteRequest = {
-          name: existingRoute?.properties.routeName || "Updated Route",
-          region: "Custom",
-          maxAltitude: 0,
+          name:
+            options?.name ||
+            existingRoute?.properties.routeName ||
+            "Updated Route",
+          region:
+            options?.region || existingRoute?.properties.region || "Custom",
+          minAltitude:
+            options?.minAltitude ?? existingRoute?.properties.minAltitude ?? 0,
+          maxAltitude:
+            options?.maxAltitude ?? existingRoute?.properties.maxAltitude ?? 0,
+          difficultyLevel:
+            options?.difficultyLevel ||
+            (existingRoute?.properties.roadType as DifficultyLevel) ||
+            "MODERATE",
           distanceKm: distance / 1000,
           geometryCoordinates: points.map(
             (p) => [p.lng, p.lat] as [number, number]
           ),
+          description:
+            options?.description || existingRoute?.properties.description,
+          trekName: options?.trekName || existingRoute?.properties.trekName,
+          durationDays:
+            options?.durationDays || existingRoute?.properties.durationDays,
           isActive: true,
         };
 
@@ -336,58 +410,130 @@ export function useRoutes(): UseRoutesReturn {
           });
           return true;
         } else {
-          throw new Error("Failed to update route");
+          // Check if it's an auth error and prompt for re-login
+          if (
+            response.message?.toLowerCase().includes("unauthorized") ||
+            response.message?.toLowerCase().includes("not authenticated") ||
+            response.message?.toLowerCase().includes("401")
+          ) {
+            toast({
+              title: "Session Expired",
+              description: "Please sign in again to continue.",
+              variant: "destructive",
+            });
+            onAuthRequired?.();
+            return false;
+          }
+          // Use the message from the API response if available
+          throw new Error(response.message || "Failed to update route");
         }
       } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to update route";
+        // Check for auth-related errors
+        if (
+          errorMessage.toLowerCase().includes("unauthorized") ||
+          errorMessage.toLowerCase().includes("401")
+        ) {
+          toast({
+            title: "Session Expired",
+            description: "Please sign in again to continue.",
+            variant: "destructive",
+          });
+          onAuthRequired?.();
+          return false;
+        }
         toast({
           title: "Error",
-          description:
-            err instanceof Error ? err.message : "Failed to update route",
+          description: errorMessage,
           variant: "destructive",
         });
         return false;
       }
     },
-    [routes]
+    [routes, onAuthRequired]
   );
 
-  const deleteRoute = useCallback(async (routeId: string): Promise<boolean> => {
-    // Check if this is a local route or if not authenticated
-    if (!isAuthenticated() || routeId.startsWith("local-")) {
-      setRoutes((prev) => prev.filter((r) => r.properties.id !== routeId));
-      setSelectedRoute((prev) =>
-        prev?.properties.id === routeId ? null : prev
-      );
-      return true;
-    }
-
-    // Make API call to delete route
-    try {
-      const response = await apiDeleteRoute(routeId);
-
-      if (response.success) {
+  const deleteRoute = useCallback(
+    async (routeId: string): Promise<boolean> => {
+      // Allow deleting local routes without auth
+      if (routeId.startsWith("local-")) {
         setRoutes((prev) => prev.filter((r) => r.properties.id !== routeId));
         setSelectedRoute((prev) =>
           prev?.properties.id === routeId ? null : prev
         );
-        toast({
-          title: "Route Deleted",
-          description: "Route has been removed from the server.",
-        });
         return true;
-      } else {
-        throw new Error("Failed to delete route");
       }
-    } catch (err) {
-      toast({
-        title: "Error",
-        description:
-          err instanceof Error ? err.message : "Failed to delete route",
-        variant: "destructive",
-      });
-      return false;
-    }
-  }, []);
+
+      // For server routes, require authentication
+      if (!isAuthenticated()) {
+        toast({
+          title: "Authentication Required",
+          description: "Please sign in to delete routes.",
+          variant: "destructive",
+        });
+        onAuthRequired?.();
+        return false;
+      }
+
+      // Make API call to delete route
+      try {
+        const response = await apiDeleteRoute(routeId);
+
+        if (response.success) {
+          setRoutes((prev) => prev.filter((r) => r.properties.id !== routeId));
+          setSelectedRoute((prev) =>
+            prev?.properties.id === routeId ? null : prev
+          );
+          toast({
+            title: "Route Deleted",
+            description: "Route has been removed from the server.",
+          });
+          return true;
+        } else {
+          // Check if it's an auth error and prompt for re-login
+          if (
+            response.message?.toLowerCase().includes("unauthorized") ||
+            response.message?.toLowerCase().includes("not authenticated") ||
+            response.message?.toLowerCase().includes("401")
+          ) {
+            toast({
+              title: "Session Expired",
+              description: "Please sign in again to continue.",
+              variant: "destructive",
+            });
+            onAuthRequired?.();
+            return false;
+          }
+          // Use the message from the API response
+          throw new Error(response.message || "Failed to delete route");
+        }
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to delete route";
+        // Check for auth-related errors
+        if (
+          errorMessage.toLowerCase().includes("unauthorized") ||
+          errorMessage.toLowerCase().includes("401")
+        ) {
+          toast({
+            title: "Session Expired",
+            description: "Please sign in again to continue.",
+            variant: "destructive",
+          });
+          onAuthRequired?.();
+          return false;
+        }
+        toast({
+          title: "Error",
+          description: errorMessage,
+          variant: "destructive",
+        });
+        return false;
+      }
+    },
+    [onAuthRequired]
+  );
 
   const requiresAuth = useCallback(() => {
     return !isAuthenticated();

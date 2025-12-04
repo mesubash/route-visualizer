@@ -67,15 +67,34 @@ export interface RouteResponse {
   updatedAt: string;
 }
 
-// Route Request - for creating/updating routes
+// Route Request - for creating/updating routes (full update)
 export interface RouteRequest {
-  name: string;
+  name: string; // Required (3-255 chars)
+  abbreviation?: string; // Optional (max 20 chars)
+  trekName?: string; // Optional (max 150 chars)
+  description?: string; // Optional
+  region: string; // Required (max 100 chars)
+  minAltitude: number; // Required (>= 0)
+  maxAltitude: number; // Required (> 0)
+  durationDays?: number; // Optional (> 0 if provided)
+  distanceKm?: number; // Optional (> 0 if provided)
+  difficultyLevel: DifficultyLevel; // Required
+  geometryCoordinates: [number, number][]; // Required (min 2 points)
+  rescueCategoryId?: string; // Optional (auto-assigned)
+  estimatedRescueCost?: number; // Optional (>= 0)
+  isActive?: boolean; // Optional (default: true)
+  metadata?: Record<string, unknown>; // Optional
+}
+
+// Route Partial Update Request - for PATCH operations
+export interface RoutePartialUpdateRequest {
+  name?: string;
   abbreviation?: string;
   trekName?: string;
   description?: string;
-  region: string;
+  region?: string;
   minAltitude?: number;
-  maxAltitude: number;
+  maxAltitude?: number;
   durationDays?: number;
   distanceKm?: number;
   difficultyLevel?: DifficultyLevel;
@@ -106,14 +125,27 @@ export interface ApiResponse<T> {
   timestamp?: string;
 }
 
-// Route Statistics
+// Route Statistics - from GET /api/admin/routes/statistics
 export interface RouteStatistics {
   totalRoutes: number;
   activeRoutes: number;
+  inactiveRoutes: number;
   routesWithGeometry: number;
+  routesWithoutGeometry: number;
   highAltitudeRoutes: number;
+  extremeAltitudeRoutes: number;
+  averageMaxAltitude: number;
+  averageDuration: number;
   byRegion: Record<string, number>;
   byDifficulty: Record<DifficultyLevel, number>;
+}
+
+// Route Import Response - from import endpoints
+export interface RouteImportResponse {
+  totalProcessed: number;
+  successCount: number;
+  failedCount: number;
+  errors: string[];
 }
 
 // Search parameters for routes
@@ -139,6 +171,14 @@ export interface RouteProperties {
   waypoints?: Waypoint[];
   createdAt?: string;
   color?: string;
+  // Extended fields from API
+  region?: string;
+  minAltitude?: number;
+  maxAltitude?: number;
+  description?: string;
+  trekName?: string;
+  durationDays?: number;
+  isActive?: boolean;
 }
 
 export interface RouteFeature {
@@ -199,6 +239,14 @@ export function routeResponseToFeature(route: RouteResponse): RouteFeature {
       routeName: route.name,
       roadType: route.difficultyLevel || "Unknown",
       createdAt: route.createdAt,
+      // Extended fields
+      region: route.region,
+      minAltitude: route.minAltitude,
+      maxAltitude: route.maxAltitude,
+      description: route.description || undefined,
+      trekName: route.trekName || undefined,
+      durationDays: route.durationDays || undefined,
+      isActive: route.isActive,
     },
   };
 }

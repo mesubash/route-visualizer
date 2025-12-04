@@ -1,7 +1,7 @@
 // Authentication service for admin operations
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "https://api.himalayanguardian.com";
+  import.meta.env.VITE_API_BASE_URL;
 
 const AUTH_API = `${API_BASE_URL}/api/auth`;
 const TOKEN_KEY = "auth_token";
@@ -89,7 +89,13 @@ export function logout(): void {
  * Get the stored auth token
  */
 export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (token) {
+    console.log("Auth token found:", token.substring(0, 20) + "...");
+  } else {
+    console.log("No auth token found in localStorage");
+  }
+  return token;
 }
 
 /**
@@ -97,10 +103,16 @@ export function getToken(): string | null {
  */
 export function getUser(): User | null {
   const userStr = localStorage.getItem(USER_KEY);
-  if (!userStr) return null;
+  if (!userStr) {
+    console.log("No user found in localStorage");
+    return null;
+  }
   try {
-    return JSON.parse(userStr);
+    const user = JSON.parse(userStr);
+    console.log("User found:", user?.email, "Role:", user?.role);
+    return user;
   } catch {
+    console.log("Failed to parse user from localStorage");
     return null;
   }
 }
@@ -125,7 +137,11 @@ export function isAdmin(): boolean {
  */
 export function getAuthHeaders(): Record<string, string> {
   const token = getToken();
-  if (!token) return {};
+  if (!token) {
+    console.warn("getAuthHeaders: No token available - user not authenticated");
+    return {};
+  }
+  console.log("getAuthHeaders: Returning Authorization header with token");
   return {
     Authorization: `Bearer ${token}`,
   };
