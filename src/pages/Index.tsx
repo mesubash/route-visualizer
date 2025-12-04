@@ -4,6 +4,7 @@ import MapView from "@/components/MapView";
 import RouteDetailsPanel from "@/components/RouteDetailsPanel";
 import RouteList from "@/components/RouteList";
 import DrawingControls from "@/components/DrawingControls";
+import EditRouteControls from "@/components/EditRouteControls";
 import FetchRoutesPanel from "@/components/FetchRoutesPanel";
 import { useRoutes } from "@/hooks/useRoutes";
 import { Coordinates } from "@/types/route";
@@ -17,6 +18,7 @@ const Index = () => {
     fetchRouteData,
     selectRoute,
     addRoute,
+    updateRoute,
     clearRoutes,
   } = useRoutes();
 
@@ -24,6 +26,10 @@ const Index = () => {
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawnPoints, setDrawnPoints] = useState<Coordinates[]>([]);
   const [routeName, setRouteName] = useState("");
+
+  // Editing state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editPoints, setEditPoints] = useState<Coordinates[]>([]);
 
   const { origin, destination } = useMemo(() => {
     if (!selectedRoute || !selectedRoute.properties.waypoints?.length) {
@@ -41,21 +47,26 @@ const Index = () => {
   }, [selectedRoute]);
 
   const handleFetchRoutes = useCallback(() => {
-    // Using default NYC coordinates for demo
     fetchRouteData(40.7128, -74.006, 40.758, -73.9855);
   }, [fetchRouteData]);
 
   const handleMapClick = useCallback((coords: Coordinates) => {
-    setDrawnPoints((prev) => [...prev, coords]);
-  }, []);
+    if (isDrawing) {
+      setDrawnPoints((prev) => [...prev, coords]);
+    } else if (isEditing) {
+      setEditPoints((prev) => [...prev, coords]);
+    }
+  }, [isDrawing, isEditing]);
 
+  // Drawing handlers
   const handleToggleDrawing = useCallback(() => {
+    if (isEditing) return; // Don't allow drawing while editing
     setIsDrawing((prev) => !prev);
     if (isDrawing) {
       setDrawnPoints([]);
       setRouteName("");
     }
-  }, [isDrawing]);
+  }, [isDrawing, isEditing]);
 
   const handleClearPoints = useCallback(() => {
     setDrawnPoints([]);
@@ -78,6 +89,50 @@ const Index = () => {
     setDrawnPoints([]);
     setRouteName("");
   }, [drawnPoints, routeName, addRoute]);
+
+  // Editing handlers
+  const handleStartEdit = useCallback(() => {
+    if (!selectedRoute || isDrawing) return;
+    const points: Coordinates[] = selectedRoute.geometry.coordinates.map(
+      ([lng, lat]) => ({ lat, lng })
+    );
+    setEditPoints(points);
+    setIsEditing(true);
+  }, [selectedRoute, isDrawing]);
+
+  const handleCancelEdit = useCallback(() => {
+    setIsEditing(false);
+    setEditPoints([]);
+  }, []);
+
+  const handleSaveEdit = useCallback(() => {
+    if (!selectedRoute || editPoints.length < 2) return;
+
+    updateRoute(selectedRoute.properties.id, editPoints);
+    toast({
+      title: "Route Updated",
+      description: `"${selectedRoute.properties.routeName}" has been updated.`,
+    });
+
+    setIsEditing(false);
+    setEditPoints([]);
+  }, [selectedRoute, editPoints, updateRoute]);
+
+  const handleEditUndoPoint = useCallback(() => {
+    setEditPoints((prev) => prev.slice(0, -1));
+  }, []);
+
+  const handleEditClearPoints = useCallback(() => {
+    setEditPoints([]);
+  }, []);
+
+  const handleEditPointDrag = useCallback((index: number, coords: Coordinates) => {
+    setEditPoints((prev) => {
+      const newPoints = [...prev];
+      newPoints[index] = coords;
+      return newPoints;
+    });
+  }, []);
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background">
@@ -126,6 +181,19 @@ const Index = () => {
             onUndoLastPoint={handleUndoLastPoint}
           />
 
+          {/* Edit Route Section */}
+          <EditRouteControls
+            isEditing={isEditing}
+            editPoints={editPoints}
+            routeName={selectedRoute?.properties.routeName || ""}
+            onStartEdit={handleStartEdit}
+            onCancelEdit={handleCancelEdit}
+            onSaveEdit={handleSaveEdit}
+            onUndoPoint={handleEditUndoPoint}
+            onClearPoints={handleEditClearPoints}
+            hasSelectedRoute={!!selectedRoute && !isDrawing}
+          />
+
           {/* Route List & Details */}
           {routes.length > 0 && (
             <>
@@ -144,11 +212,14 @@ const Index = () => {
           <MapView
             routes={routes}
             selectedRoute={selectedRoute}
-            origin={origin}
-            destination={destination}
+            origin={isEditing ? null : origin}
+            destination={isEditing ? null : destination}
             isDrawing={isDrawing}
             drawnPoints={drawnPoints}
             onMapClick={handleMapClick}
+            isEditing={isEditing}
+            editPoints={editPoints}
+            onEditPointDrag={handleEditPointDrag}
           />
 
           {/* Map overlay info */}

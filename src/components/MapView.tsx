@@ -18,6 +18,9 @@ interface MapViewProps {
   isDrawing?: boolean;
   drawnPoints?: Coordinates[];
   onMapClick?: (coords: Coordinates) => void;
+  isEditing?: boolean;
+  editPoints?: Coordinates[];
+  onEditPointDrag?: (index: number, coords: Coordinates) => void;
 }
 
 export default function MapView({
@@ -28,6 +31,9 @@ export default function MapView({
   isDrawing = false,
   drawnPoints = [],
   onMapClick,
+  isEditing = false,
+  editPoints = [],
+  onEditPointDrag,
 }: MapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -35,6 +41,8 @@ export default function MapView({
   const markerLayersRef = useRef<L.Marker[]>([]);
   const drawnLayerRef = useRef<L.Polyline | null>(null);
   const drawnMarkersRef = useRef<L.CircleMarker[]>([]);
+  const editLayerRef = useRef<L.Polyline | null>(null);
+  const editMarkersRef = useRef<L.Marker[]>([]);
 
   // Create custom icons
   const originIcon = L.divIcon({
@@ -53,14 +61,14 @@ export default function MapView({
     popupAnchor: [0, -24],
   });
 
-  // Handle map clicks for drawing
+  // Handle map clicks for drawing or editing
   const handleMapClick = useCallback(
     (e: L.LeafletMouseEvent) => {
-      if (isDrawing && onMapClick) {
+      if ((isDrawing || isEditing) && onMapClick) {
         onMapClick({ lat: e.latlng.lat, lng: e.latlng.lng });
       }
     },
-    [isDrawing, onMapClick]
+    [isDrawing, isEditing, onMapClick]
   );
 
   // Initialize map
@@ -86,7 +94,7 @@ export default function MapView({
     };
   }, []);
 
-  // Add/remove click handler based on drawing mode
+  // Add/remove click handler based on drawing/editing mode
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -95,13 +103,56 @@ export default function MapView({
 
     // Update cursor style
     const container = map.getContainer();
-    container.style.cursor = isDrawing ? "crosshair" : "";
+    container.style.cursor = isDrawing || isEditing ? "crosshair" : "";
 
     return () => {
       map.off("click", handleMapClick);
       container.style.cursor = "";
     };
-  }, [handleMapClick, isDrawing]);
+  }, [handleMapClick, isDrawing, isEditing]);
+
+  // Update edit route layer
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Clear existing edit elements
+    editLayerRef.current?.remove();
+    editMarkersRef.current.forEach((m) => m.remove());
+    editMarkersRef.current = [];
+
+    if (isEditing && editPoints.length > 0) {
+      // Add draggable markers for each point
+      editPoints.forEach((point, index) => {
+        const marker = L.marker([point.lat, point.lng], {
+          draggable: true,
+          icon: L.divIcon({
+            className: "edit-marker",
+            html: `<div style="background-color: ${index === 0 ? '#22c55e' : index === editPoints.length - 1 ? '#ef4444' : '#8b5cf6'}; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3); cursor: grab;"></div>`,
+            iconSize: [16, 16],
+            iconAnchor: [8, 8],
+          }),
+        }).addTo(map);
+
+        marker.on("dragend", () => {
+          const latlng = marker.getLatLng();
+          onEditPointDrag?.(index, { lat: latlng.lat, lng: latlng.lng });
+        });
+
+        editMarkersRef.current.push(marker);
+      });
+
+      // Draw polyline
+      if (editPoints.length > 1) {
+        const coords: L.LatLngExpression[] = editPoints.map((p) => [p.lat, p.lng]);
+        editLayerRef.current = L.polyline(coords, {
+          color: "#8b5cf6",
+          weight: 4,
+          opacity: 0.9,
+        }).addTo(map);
+      }
+    }
+  }, [isEditing, editPoints, onEditPointDrag]);
 
   // Update drawn route
   useEffect(() => {
@@ -212,9 +263,9 @@ export default function MapView({
     <div className="relative h-full w-full overflow-hidden rounded-lg">
       <div ref={mapContainerRef} className="h-full w-full" />
       <div className="pointer-events-none absolute inset-0 rounded-lg ring-1 ring-border/50" />
-      {isDrawing && (
+      {(isDrawing || isEditing) && (
         <div className="absolute left-4 top-4 z-[1000] rounded-lg bg-card/95 px-3 py-2 text-sm font-medium shadow-lg backdrop-blur">
-          Click on the map to add points
+          {isEditing ? "Drag markers or click to add points" : "Click on the map to add points"}
         </div>
       )}
     </div>
