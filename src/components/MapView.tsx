@@ -76,8 +76,8 @@ export default function MapView({
     if (!mapContainerRef.current || mapRef.current) return;
 
     const map = L.map(mapContainerRef.current, {
-      center: [40.7128, -74.006], // NYC default
-      zoom: 12,
+      center: [28.3949, 84.124], // Nepal default center (for trekking routes)
+      zoom: 7,
       scrollWheelZoom: true,
       zoomControl: true,
     });
@@ -208,19 +208,51 @@ export default function MapView({
         ([lng, lat]) => [lat, lng] as L.LatLngExpression
       );
 
+      // Draw outline first for selected route
+      if (isSelected) {
+        const outline = L.polyline(coordinates, {
+          color: "#1e40af",
+          weight: 8,
+          opacity: 0.3,
+          lineCap: "round",
+          lineJoin: "round",
+        }).addTo(map);
+        routeLayersRef.current.push(outline);
+      }
+
       const polyline = L.polyline(coordinates, {
-        color: isSelected ? "#3b82f6" : "#94a3b8",
-        weight: isSelected ? 5 : 3,
-        opacity: isSelected ? 1 : 0.6,
+        color: isSelected ? "#3b82f6" : "#64748b",
+        weight: isSelected ? 5 : 2,
+        opacity: isSelected ? 1 : 0.5,
         lineCap: "round",
         lineJoin: "round",
       }).addTo(map);
 
+      // Add hover effect for non-selected routes
+      if (!isSelected) {
+        polyline.on("mouseover", () => {
+          polyline.setStyle({ color: "#3b82f6", weight: 3, opacity: 0.8 });
+        });
+        polyline.on("mouseout", () => {
+          polyline.setStyle({ color: "#64748b", weight: 2, opacity: 0.5 });
+        });
+      }
+
       routeLayersRef.current.push(polyline);
     });
 
-    // Fit bounds if routes exist
-    if (routes.length > 0) {
+    // Fit bounds to selected route or all routes
+    if (selectedRoute && selectedRoute.geometry.coordinates.length > 0) {
+      // Zoom to the selected route
+      const bounds = L.latLngBounds([]);
+      selectedRoute.geometry.coordinates.forEach(([lng, lat]) => {
+        bounds.extend([lat, lng]);
+      });
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15, animate: true });
+      }
+    } else if (routes.length > 0) {
+      // Fit bounds to all routes if no route is selected
       const bounds = L.latLngBounds([]);
       routes.forEach((route) => {
         route.geometry.coordinates.forEach(([lng, lat]) => {
@@ -228,7 +260,7 @@ export default function MapView({
         });
       });
       if (bounds.isValid()) {
-        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15, animate: true });
       }
     }
   }, [routes, selectedRoute]);
@@ -260,12 +292,14 @@ export default function MapView({
   }, [origin, destination]);
 
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-lg">
+    <div className="relative h-full w-full overflow-hidden">
       <div ref={mapContainerRef} className="h-full w-full" />
-      <div className="pointer-events-none absolute inset-0 rounded-lg ring-1 ring-border/50" />
       {(isDrawing || isEditing) && (
-        <div className="absolute left-4 top-4 z-[1000] rounded-lg bg-card/95 px-3 py-2 text-sm font-medium shadow-lg backdrop-blur">
-          {isEditing ? "Drag markers or click to add points" : "Click on the map to add points"}
+        <div className="absolute left-4 top-4 z-[1000] rounded-lg bg-card/95 px-4 py-2.5 text-sm font-medium shadow-lg backdrop-blur-sm border">
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+            {isEditing ? "Drag markers or click to add points" : "Click on the map to add points"}
+          </div>
         </div>
       )}
     </div>
