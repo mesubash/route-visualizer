@@ -1,189 +1,217 @@
-import { RouteApiResponse, RouteCollection, RouteFeature } from "@/types/route";
+import {
+  ApiResponse,
+  PaginatedResponse,
+  RouteResponse,
+  RouteSummaryResponse,
+  RouteSearchParams,
+  RouteFeature,
+  RouteCollection,
+  RouteApiResponse,
+  RouteRequest,
+  routeResponseToFeature,
+} from "@/types/route";
+import { getAuthHeaders } from "@/lib/auth";
 
-// Mock data for demonstration - simulates PostGIS API response
-const mockRouteData: RouteCollection = {
-  type: "FeatureCollection",
-  features: [
-    {
-      type: "Feature",
-      geometry: {
-        type: "LineString",
-        coordinates: [
-          [-73.9857, 40.7484], // Empire State Building
-          [-73.9814, 40.7505],
-          [-73.9776, 40.7527],
-          [-73.9739, 40.7549],
-          [-73.9712, 40.7580],
-          [-73.9697, 40.7614],
-          [-73.9680, 40.7645],
-          [-73.9654, 40.7681],
-          [-73.9632, 40.7712],
-          [-73.9614, 40.7749],
-          [-73.9851, 40.7589], // Times Square
-        ],
-      },
-      properties: {
-        id: "route-1",
-        distance: 2450,
-        duration: 1800,
-        routeName: "Midtown Express",
-        roadType: "Urban",
-        waypoints: [
-          { lat: 40.7484, lng: -73.9857, name: "Empire State Building" },
-          { lat: 40.7589, lng: -73.9851, name: "Times Square" },
-        ],
-      },
-    },
-    {
-      type: "Feature",
-      geometry: {
-        type: "LineString",
-        coordinates: [
-          [-73.9857, 40.7484],
-          [-73.9890, 40.7510],
-          [-73.9920, 40.7535],
-          [-73.9880, 40.7560],
-          [-73.9851, 40.7589],
-        ],
-      },
-      properties: {
-        id: "route-2",
-        distance: 1850,
-        duration: 1500,
-        routeName: "Scenic Route",
-        roadType: "Mixed",
-        waypoints: [
-          { lat: 40.7484, lng: -73.9857, name: "Empire State Building" },
-          { lat: 40.7589, lng: -73.9851, name: "Times Square" },
-        ],
-      },
-    },
-  ],
-};
+// Get API base URL from environment variables
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "https://api.himalayanguardian.com";
 
-// Simulated API delay
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+// API endpoints
+const ROUTES_API = `${API_BASE_URL}/api/routes`;
+const ADMIN_ROUTES_API = `${API_BASE_URL}/api/admin/routes`;
 
-export async function fetchRoutes(
-  originLat: number,
-  originLng: number,
-  destLat: number,
-  destLng: number
-): Promise<RouteApiResponse> {
-  // Simulate API call delay
-  await delay(1500);
+/**
+ * Build query string from search parameters
+ */
+function buildQueryString(params: RouteSearchParams): string {
+  const searchParams = new URLSearchParams();
 
-  // In production, replace with actual API call:
-  // const response = await fetch(
-  //   `/api/routes?origin=${originLat},${originLng}&destination=${destLat},${destLng}`
-  // );
-  // return response.json();
+  if (params.search) searchParams.append("search", params.search);
+  if (params.region) searchParams.append("region", params.region);
+  if (params.difficultyLevel)
+    searchParams.append("difficultyLevel", params.difficultyLevel);
+  if (params.minAltitude !== undefined)
+    searchParams.append("minAltitude", params.minAltitude.toString());
+  if (params.maxAltitude !== undefined)
+    searchParams.append("maxAltitude", params.maxAltitude.toString());
+  if (params.page !== undefined)
+    searchParams.append("page", params.page.toString());
+  if (params.size !== undefined)
+    searchParams.append("size", params.size.toString());
+  if (params.sortBy) searchParams.append("sortBy", params.sortBy);
+  if (params.sortDir) searchParams.append("sortDir", params.sortDir);
 
-  // Generate mock routes based on input coordinates
-  const generatedRoutes = generateMockRoutes(
-    originLat,
-    originLng,
-    destLat,
-    destLng
-  );
-
-  return {
-    success: true,
-    data: generatedRoutes,
-  };
+  const queryString = searchParams.toString();
+  return queryString ? `?${queryString}` : "";
 }
 
-function generateMockRoutes(
-  originLat: number,
-  originLng: number,
-  destLat: number,
-  destLng: number
-): RouteCollection {
-  // Generate intermediate points for a realistic route
-  const numPoints = 8;
-  const coordinates: [number, number][] = [];
-
-  for (let i = 0; i <= numPoints; i++) {
-    const t = i / numPoints;
-    // Add some randomness to simulate real road paths
-    const jitter = i > 0 && i < numPoints ? (Math.random() - 0.5) * 0.005 : 0;
-    const lng = originLng + (destLng - originLng) * t + jitter;
-    const lat = originLat + (destLat - originLat) * t + jitter;
-    coordinates.push([lng, lat]);
-  }
-
-  // Calculate approximate distance (Haversine formula)
-  const distance = calculateDistance(originLat, originLng, destLat, destLng);
-  const duration = Math.round(distance / 10); // ~36 km/h average speed
-
-  const primaryRoute: RouteFeature = {
-    type: "Feature",
-    geometry: {
-      type: "LineString",
-      coordinates,
+/**
+ * Generic fetch wrapper with error handling
+ */
+async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...options?.headers,
     },
-    properties: {
-      id: "route-primary",
-      distance: Math.round(distance),
-      duration,
-      routeName: "Fastest Route",
-      roadType: "Highway",
-      waypoints: [
-        { lat: originLat, lng: originLng, name: "Origin" },
-        { lat: destLat, lng: destLng, name: "Destination" },
-      ],
-    },
-  };
-
-  // Generate alternative route with slight variation
-  const altCoordinates: [number, number][] = coordinates.map(([lng, lat], i) => {
-    if (i === 0 || i === coordinates.length - 1) return [lng, lat];
-    const offset = (Math.random() - 0.5) * 0.008;
-    return [lng + offset, lat + offset];
   });
 
-  const altRoute: RouteFeature = {
-    type: "Feature",
-    geometry: {
-      type: "LineString",
-      coordinates: altCoordinates,
-    },
-    properties: {
-      id: "route-alt",
-      distance: Math.round(distance * 1.15),
-      duration: Math.round(duration * 1.1),
-      routeName: "Alternative Route",
-      roadType: "Local Roads",
-      waypoints: [
-        { lat: originLat, lng: originLng, name: "Origin" },
-        { lat: destLat, lng: destLng, name: "Destination" },
-      ],
-    },
-  };
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      errorData.message || `HTTP error! status: ${response.status}`
+    );
+  }
 
-  return {
-    type: "FeatureCollection",
-    features: [primaryRoute, altRoute],
-  };
+  return response.json();
 }
 
-function calculateDistance(
-  lat1: number,
-  lng1: number,
-  lat2: number,
-  lng2: number
-): number {
-  const R = 6371000; // Earth's radius in meters
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) *
-      Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+/**
+ * Search routes with pagination
+ * GET /api/routes
+ */
+export async function searchRoutes(
+  params: RouteSearchParams = {}
+): Promise<ApiResponse<PaginatedResponse<RouteSummaryResponse>>> {
+  const queryString = buildQueryString(params);
+  return apiFetch<ApiResponse<PaginatedResponse<RouteSummaryResponse>>>(
+    `${ROUTES_API}${queryString}`
+  );
+}
+
+/**
+ * Get all routes (no pagination) - for dropdowns
+ * GET /api/routes/all
+ */
+export async function getAllRoutes(): Promise<
+  ApiResponse<RouteSummaryResponse[]>
+> {
+  return apiFetch<ApiResponse<RouteSummaryResponse[]>>(`${ROUTES_API}/all`);
+}
+
+/**
+ * Get route details by ID
+ * GET /api/routes/{id}
+ */
+export async function getRouteById(
+  id: string
+): Promise<ApiResponse<RouteResponse>> {
+  return apiFetch<ApiResponse<RouteResponse>>(`${ROUTES_API}/${id}`);
+}
+
+/**
+ * Fetch routes and convert to RouteFeature format for map display
+ * This maintains backward compatibility with existing components
+ */
+export async function fetchRoutes(
+  originLat?: number,
+  originLng?: number,
+  destLat?: number,
+  destLng?: number
+): Promise<RouteApiResponse> {
+  try {
+    // Fetch all routes from the API
+    const response = await getAllRoutes();
+
+    if (!response.success || !response.data) {
+      throw new Error("Failed to fetch routes");
+    }
+
+    // For each route summary, fetch full details to get geometry
+    const routeDetailsPromises = response.data
+      .filter((route) => route.hasGeometry && route.isActive)
+      .slice(0, 20) // Limit to first 20 routes for performance
+      .map(async (routeSummary) => {
+        try {
+          const detailResponse = await getRouteById(routeSummary.id);
+          if (detailResponse.success && detailResponse.data) {
+            return routeResponseToFeature(detailResponse.data);
+          }
+          return null;
+        } catch {
+          console.warn(`Failed to fetch details for route ${routeSummary.id}`);
+          return null;
+        }
+      });
+
+    const routeFeatures = await Promise.all(routeDetailsPromises);
+    const validFeatures = routeFeatures.filter(
+      (feature): feature is RouteFeature =>
+        feature !== null && feature.geometry.coordinates.length > 0
+    );
+
+    const routeCollection: RouteCollection = {
+      type: "FeatureCollection",
+      features: validFeatures,
+    };
+
+    return {
+      success: true,
+      data: routeCollection,
+    };
+  } catch (error) {
+    console.error("Error fetching routes:", error);
+    return {
+      success: false,
+      data: { type: "FeatureCollection", features: [] },
+      error: error instanceof Error ? error.message : "Failed to fetch routes",
+    };
+  }
+}
+
+/**
+ * Fetch routes with search/filter parameters
+ */
+export async function fetchRoutesWithParams(
+  params: RouteSearchParams
+): Promise<RouteApiResponse> {
+  try {
+    const response = await searchRoutes(params);
+
+    if (!response.success || !response.data) {
+      throw new Error("Failed to fetch routes");
+    }
+
+    // Fetch full details for routes with geometry
+    const routeDetailsPromises = response.data.content
+      .filter((route) => route.hasGeometry && route.isActive)
+      .map(async (routeSummary) => {
+        try {
+          const detailResponse = await getRouteById(routeSummary.id);
+          if (detailResponse.success && detailResponse.data) {
+            return routeResponseToFeature(detailResponse.data);
+          }
+          return null;
+        } catch {
+          console.warn(`Failed to fetch details for route ${routeSummary.id}`);
+          return null;
+        }
+      });
+
+    const routeFeatures = await Promise.all(routeDetailsPromises);
+    const validFeatures = routeFeatures.filter(
+      (feature): feature is RouteFeature =>
+        feature !== null && feature.geometry.coordinates.length > 0
+    );
+
+    const routeCollection: RouteCollection = {
+      type: "FeatureCollection",
+      features: validFeatures,
+    };
+
+    return {
+      success: true,
+      data: routeCollection,
+    };
+  } catch (error) {
+    console.error("Error fetching routes:", error);
+    return {
+      success: false,
+      data: { type: "FeatureCollection", features: [] },
+      error: error instanceof Error ? error.message : "Failed to fetch routes",
+    };
+  }
 }
 
 export function formatDistance(meters: number): string {
@@ -201,4 +229,98 @@ export function formatDuration(seconds: number): string {
     return `${hours}h ${minutes}min`;
   }
   return `${minutes} min`;
+}
+
+// ============================================
+// ADMIN API ENDPOINTS (Require Authentication)
+// ============================================
+
+/**
+ * Create a new route (Admin only)
+ * POST /api/admin/routes
+ */
+export async function createRoute(
+  route: RouteRequest
+): Promise<ApiResponse<RouteResponse>> {
+  return apiFetch<ApiResponse<RouteResponse>>(ADMIN_ROUTES_API, {
+    method: "POST",
+    headers: {
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(route),
+  });
+}
+
+/**
+ * Update an existing route (Admin only)
+ * PUT /api/admin/routes/{id}
+ */
+export async function updateRoute(
+  id: string,
+  route: RouteRequest
+): Promise<ApiResponse<RouteResponse>> {
+  return apiFetch<ApiResponse<RouteResponse>>(`${ADMIN_ROUTES_API}/${id}`, {
+    method: "PUT",
+    headers: {
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(route),
+  });
+}
+
+/**
+ * Partially update a route (Admin only)
+ * PATCH /api/admin/routes/{id}
+ */
+export async function patchRoute(
+  id: string,
+  updates: Partial<RouteRequest>
+): Promise<ApiResponse<RouteResponse>> {
+  return apiFetch<ApiResponse<RouteResponse>>(`${ADMIN_ROUTES_API}/${id}`, {
+    method: "PATCH",
+    headers: {
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(updates),
+  });
+}
+
+/**
+ * Delete a route (Admin only)
+ * DELETE /api/admin/routes/{id}
+ */
+export async function deleteRoute(id: string): Promise<ApiResponse<void>> {
+  return apiFetch<ApiResponse<void>>(`${ADMIN_ROUTES_API}/${id}`, {
+    method: "DELETE",
+    headers: {
+      ...getAuthHeaders(),
+    },
+  });
+}
+
+/**
+ * Convert RouteFeature to RouteRequest for API submission
+ */
+export function featureToRouteRequest(
+  feature: RouteFeature,
+  additionalData?: Partial<RouteRequest>
+): RouteRequest {
+  const coords = feature.geometry.coordinates;
+
+  // Calculate min/max altitude if coordinates have elevation
+  let minAltitude = 0;
+  let maxAltitude = 0;
+
+  return {
+    name: feature.properties.routeName,
+    region: additionalData?.region || "Unknown",
+    maxAltitude: maxAltitude || additionalData?.maxAltitude || 0,
+    minAltitude: minAltitude || additionalData?.minAltitude,
+    distanceKm: feature.properties.distance / 1000,
+    geometryCoordinates: coords,
+    difficultyLevel: additionalData?.difficultyLevel,
+    description: additionalData?.description,
+    isActive: true,
+    ...additionalData,
+  };
 }
