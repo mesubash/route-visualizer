@@ -4,6 +4,7 @@ import MapView from "@/components/MapView";
 import RouteDetailsPanel from "@/components/RouteDetailsPanel";
 import RouteList from "@/components/RouteList";
 import DrawingControls from "@/components/DrawingControls";
+import FetchRoutesPanel from "@/components/FetchRoutesPanel";
 import { useRoutes } from "@/hooks/useRoutes";
 import { Coordinates } from "@/types/route";
 import { toast } from "@/hooks/use-toast";
@@ -12,8 +13,11 @@ const Index = () => {
   const {
     routes,
     selectedRoute,
+    status,
+    fetchRouteData,
     selectRoute,
     addRoute,
+    clearRoutes,
   } = useRoutes();
 
   // Drawing state
@@ -35,6 +39,11 @@ const Index = () => {
       destination: { lat: destWp.lat, lng: destWp.lng } as Coordinates,
     };
   }, [selectedRoute]);
+
+  const handleFetchRoutes = useCallback(() => {
+    // Using default NYC coordinates for demo
+    fetchRouteData(40.7128, -74.006, 40.758, -73.9855);
+  }, [fetchRouteData]);
 
   const handleMapClick = useCallback((coords: Coordinates) => {
     setDrawnPoints((prev) => [...prev, coords]);
@@ -80,9 +89,7 @@ const Index = () => {
           </div>
           <div>
             <h1 className="text-lg font-semibold tracking-tight">RouteViz</h1>
-            <p className="text-xs text-muted-foreground">
-              Route Visualization
-            </p>
+            <p className="text-xs text-muted-foreground">Route Visualization</p>
           </div>
         </div>
         <a
@@ -99,6 +106,15 @@ const Index = () => {
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <aside className="flex w-80 shrink-0 flex-col gap-4 overflow-y-auto border-r bg-muted/30 p-4 lg:w-96">
+          {/* Fetch Routes Section */}
+          <FetchRoutesPanel
+            status={status}
+            routeCount={routes.length}
+            onFetchRoutes={handleFetchRoutes}
+            onClearRoutes={clearRoutes}
+          />
+
+          {/* Draw Route Section */}
           <DrawingControls
             isDrawing={isDrawing}
             drawnPoints={drawnPoints}
@@ -110,6 +126,7 @@ const Index = () => {
             onUndoLastPoint={handleUndoLastPoint}
           />
 
+          {/* Route List & Details */}
           {routes.length > 0 && (
             <>
               <RouteList
@@ -119,12 +136,6 @@ const Index = () => {
               />
               <RouteDetailsPanel route={selectedRoute} />
             </>
-          )}
-
-          {routes.length === 0 && !isDrawing && (
-            <div className="flex flex-1 items-center justify-center text-center text-sm text-muted-foreground">
-              <p>No routes yet. Start drawing to create one!</p>
-            </div>
           )}
         </aside>
 
@@ -146,8 +157,7 @@ const Index = () => {
               <Map className="mx-auto mb-3 h-10 w-10 text-primary/60" />
               <h2 className="text-lg font-semibold">Welcome to RouteViz</h2>
               <p className="mt-1 max-w-xs text-sm text-muted-foreground">
-                Click "Start Drawing" in the sidebar to create your first route
-                by clicking points on the map.
+                Fetch routes from the API or draw your own route on the map.
               </p>
             </div>
           )}
