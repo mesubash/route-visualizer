@@ -1,9 +1,18 @@
 import { useState, useCallback } from "react";
-import { RouteFeature, Coordinates } from "@/types/route";
+import { RouteFeature, RouteStatus, Coordinates } from "@/types/route";
+import { fetchRoutes } from "@/lib/api";
+import { toast } from "@/hooks/use-toast";
 
 interface UseRoutesReturn {
   routes: RouteFeature[];
   selectedRoute: RouteFeature | null;
+  status: RouteStatus;
+  fetchRouteData: (
+    originLat: number,
+    originLng: number,
+    destLat: number,
+    destLng: number
+  ) => Promise<void>;
   selectRoute: (routeId: string) => void;
   addRoute: (name: string, points: Coordinates[]) => void;
   deleteRoute: (routeId: string) => void;
@@ -22,7 +31,7 @@ function calculateDistance(coords: Coordinates[]): number {
       Math.sin(dLat / 2) ** 2 +
       Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    total += 6371000 * c; // Earth radius in meters
+    total += 6371000 * c;
   }
   return total;
 }
@@ -30,6 +39,40 @@ function calculateDistance(coords: Coordinates[]): number {
 export function useRoutes(): UseRoutesReturn {
   const [routes, setRoutes] = useState<RouteFeature[]>([]);
   const [selectedRoute, setSelectedRoute] = useState<RouteFeature | null>(null);
+  const [status, setStatus] = useState<RouteStatus>("idle");
+
+  const fetchRouteData = useCallback(
+    async (
+      originLat: number,
+      originLng: number,
+      destLat: number,
+      destLng: number
+    ) => {
+      setStatus("loading");
+      try {
+        const response = await fetchRoutes(originLat, originLng, destLat, destLng);
+        if (response.success && response.data.features.length > 0) {
+          setRoutes(response.data.features);
+          setSelectedRoute(response.data.features[0]);
+          setStatus("success");
+          toast({
+            title: "Routes Loaded",
+            description: `Found ${response.data.features.length} route(s).`,
+          });
+        } else {
+          throw new Error("No routes found");
+        }
+      } catch (err) {
+        setStatus("error");
+        toast({
+          title: "Error",
+          description: err instanceof Error ? err.message : "Failed to fetch routes",
+          variant: "destructive",
+        });
+      }
+    },
+    []
+  );
 
   const selectRoute = useCallback(
     (routeId: string) => {
@@ -43,7 +86,7 @@ export function useRoutes(): UseRoutesReturn {
 
   const addRoute = useCallback((name: string, points: Coordinates[]) => {
     const distance = calculateDistance(points);
-    const duration = (distance / 1000) * 72; // Assume ~50km/h average speed
+    const duration = (distance / 1000) * 72;
 
     const newRoute: RouteFeature = {
       type: "Feature",
@@ -73,19 +116,20 @@ export function useRoutes(): UseRoutesReturn {
 
   const deleteRoute = useCallback((routeId: string) => {
     setRoutes((prev) => prev.filter((r) => r.properties.id !== routeId));
-    setSelectedRoute((prev) =>
-      prev?.properties.id === routeId ? null : prev
-    );
+    setSelectedRoute((prev) => (prev?.properties.id === routeId ? null : prev));
   }, []);
 
   const clearRoutes = useCallback(() => {
     setRoutes([]);
     setSelectedRoute(null);
+    setStatus("idle");
   }, []);
 
   return {
     routes,
     selectedRoute,
+    status,
+    fetchRouteData,
     selectRoute,
     addRoute,
     deleteRoute,
