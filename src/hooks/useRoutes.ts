@@ -28,6 +28,7 @@ export interface RouteCreateOptions {
   description?: string;
   trekName?: string;
   durationDays?: number;
+  distanceKm?: number; // Optional: if not provided, will be calculated from coordinates
   coordinates?: Coordinates[]; // Optional: if provided, use these instead of points parameter
 }
 
@@ -177,6 +178,7 @@ export function useRoutes(options?: UseRoutesOptions): UseRoutesReturn {
         description,
         trekName,
         durationDays,
+        distanceKm: providedDistanceKm,
         coordinates: optionCoordinates,
       } = options;
 
@@ -200,14 +202,16 @@ export function useRoutes(options?: UseRoutesOptions): UseRoutesReturn {
 
       // Make API call to create route
       try {
-        const distance = calculateDistance(routePoints);
+        // Use provided distanceKm or calculate from coordinates
+        const calculatedDistance = calculateDistance(routePoints) / 1000;
+        const distanceKm = providedDistanceKm ?? calculatedDistance;
         const routeRequest: RouteRequest = {
           name,
           region,
           minAltitude,
           maxAltitude,
           difficultyLevel,
-          distanceKm: distance / 1000,
+          distanceKm,
           geometryCoordinates: routePoints.map(
             (p) => [p.lng, p.lat] as [number, number]
           ),
