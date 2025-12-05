@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Edit3, Check, X, Trash2, AlertCircle, LogIn, Settings2, Loader2 } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Edit3, Check, X, Trash2, AlertCircle, LogIn, Settings2, Loader2, GripVertical, Plus, MapPin, Navigation, ChevronDown, ChevronUp, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Combobox } from "@/components/ui/combobox";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Coordinates, DifficultyLevel, RouteFeature } from "@/types/route";
 import { RouteCreateOptions } from "@/hooks/useRoutes";
 import { useAuth } from "@/contexts/AuthContext";
@@ -42,6 +44,11 @@ interface EditRouteControlsProps {
   onDeleteRoute: () => Promise<boolean>;
   onUndoPoint: () => void;
   onClearPoints: () => void;
+  onUpdatePoint: (index: number, coords: Coordinates) => void;
+  onDeletePoint: (index: number) => void;
+  onInsertPoint: (index: number, coords: Coordinates) => void;
+  onMovePoint: (fromIndex: number, toIndex: number) => void;
+  onFocusPoint: (index: number) => void;
   hasSelectedRoute: boolean;
 }
 
@@ -55,11 +62,19 @@ export default function EditRouteControls({
   onDeleteRoute,
   onUndoPoint,
   onClearPoints,
+  onUpdatePoint,
+  onDeletePoint,
+  onInsertPoint,
+  onMovePoint,
+  onFocusPoint,
   hasSelectedRoute,
 }: EditRouteControlsProps) {
   const { isLoggedIn, isAdminUser, openLoginDialog } = useAuth();
   const [isDeleting, setIsDeleting] = useState(false);
-  
+  const [expandedPointIndex, setExpandedPointIndex] = useState<number | null>(null);
+  const [showPointList, setShowPointList] = useState(true);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
   // Edit form fields
   const [editName, setEditName] = useState("");
   const [editRegion, setEditRegion] = useState("");
@@ -254,12 +269,213 @@ export default function EditRouteControls({
               </TabsList>
               
               <TabsContent value="points" className="space-y-3 mt-3">
-                <p className="text-xs text-muted-foreground">Click on the map to add points. Drag markers to reposition them.</p>
-                
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    {editPoints.length > 0
+                      ? "Drag markers on map or edit coordinates below."
+                      : "Click on the map to add points."}
+                  </p>
+                  {editPoints.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowPointList(!showPointList)}
+                      className="h-6 px-2"
+                    >
+                      {showPointList ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                    </Button>
+                  )}
+                </div>
+
                 <div className="flex items-center justify-between py-2 px-3 rounded-md bg-muted/50">
                   <span className="text-sm text-muted-foreground">Total Points</span>
                   <Badge variant="secondary">{editPoints.length}</Badge>
                 </div>
+
+                {/* Enhanced Point List */}
+                {showPointList && editPoints.length > 0 && (
+                  <ScrollArea className="h-[280px] rounded-md border">
+                    <div className="p-2 space-y-1">
+                      {editPoints.map((point, index) => {
+                        const isFirst = index === 0;
+                        const isLast = index === editPoints.length - 1;
+                        const isExpanded = expandedPointIndex === index;
+
+                        return (
+                          <div
+                            key={index}
+                            className={cn(
+                              "rounded-lg border bg-card transition-all",
+                              isExpanded && "ring-2 ring-primary/20",
+                              draggedIndex === index && "opacity-50"
+                            )}
+                            draggable
+                            onDragStart={() => setDraggedIndex(index)}
+                            onDragEnd={() => setDraggedIndex(null)}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={() => {
+                              if (draggedIndex !== null && draggedIndex !== index) {
+                                onMovePoint(draggedIndex, index);
+                              }
+                              setDraggedIndex(null);
+                            }}
+                          >
+                            {/* Point Header */}
+                            <div
+                              className="flex items-center gap-2 p-2 cursor-pointer hover:bg-muted/50"
+                              onClick={() => setExpandedPointIndex(isExpanded ? null : index)}
+                            >
+                              <div className="cursor-grab active:cursor-grabbing">
+                                <GripVertical className="h-4 w-4 text-muted-foreground" />
+                              </div>
+
+                              <div
+                                className={cn(
+                                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white",
+                                  isFirst && "bg-green-500",
+                                  isLast && !isFirst && "bg-red-500",
+                                  !isFirst && !isLast && "bg-violet-500"
+                                )}
+                              >
+                                {index + 1}
+                              </div>
+
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1">
+                                  {isFirst && <span className="text-[10px] text-green-600 font-medium">START</span>}
+                                  {isLast && !isFirst && <span className="text-[10px] text-red-600 font-medium">END</span>}
+                                  {!isFirst && !isLast && <span className="text-[10px] text-muted-foreground">Point {index + 1}</span>}
+                                </div>
+                                <p className="text-[10px] text-muted-foreground truncate">
+                                  {point.lat.toFixed(6)}, {point.lng.toFixed(6)}
+                                </p>
+                              </div>
+
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6 shrink-0"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onFocusPoint(index);
+                                      }}
+                                    >
+                                      <MapPin className="h-3 w-3" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Focus on map</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+
+                              {isExpanded ? (
+                                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </div>
+
+                            {/* Expanded Edit Panel */}
+                            {isExpanded && (
+                              <div className="border-t p-2 space-y-2 bg-muted/30">
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="space-y-1">
+                                    <Label className="text-[10px] text-muted-foreground">Latitude</Label>
+                                    <Input
+                                      type="number"
+                                      step="0.000001"
+                                      value={point.lat}
+                                      onChange={(e) => {
+                                        const newLat = parseFloat(e.target.value);
+                                        if (!isNaN(newLat)) {
+                                          onUpdatePoint(index, { ...point, lat: newLat });
+                                        }
+                                      }}
+                                      className="h-7 text-xs font-mono"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-[10px] text-muted-foreground">Longitude</Label>
+                                    <Input
+                                      type="number"
+                                      step="0.000001"
+                                      value={point.lng}
+                                      onChange={(e) => {
+                                        const newLng = parseFloat(e.target.value);
+                                        if (!isNaN(newLng)) {
+                                          onUpdatePoint(index, { ...point, lng: newLng });
+                                        }
+                                      }}
+                                      className="h-7 text-xs font-mono"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="flex gap-1 pt-1">
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="flex-1 h-7 text-xs"
+                                          onClick={() => {
+                                            // Insert a new point after this one (midpoint to next or offset)
+                                            const nextPoint = editPoints[index + 1];
+                                            const newCoords: Coordinates = nextPoint
+                                              ? {
+                                                  lat: (point.lat + nextPoint.lat) / 2,
+                                                  lng: (point.lng + nextPoint.lng) / 2,
+                                                }
+                                              : {
+                                                  lat: point.lat + 0.001,
+                                                  lng: point.lng + 0.001,
+                                                };
+                                            onInsertPoint(index + 1, newCoords);
+                                          }}
+                                        >
+                                          <Plus className="h-3 w-3 mr-1" />
+                                          Add After
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>Insert new point after this one</TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="destructive"
+                                          size="sm"
+                                          className="h-7 w-7 p-0"
+                                          onClick={() => {
+                                            onDeletePoint(index);
+                                            setExpandedPointIndex(null);
+                                          }}
+                                          disabled={editPoints.length <= 2}
+                                        >
+                                          <Trash2 className="h-3 w-3" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        {editPoints.length <= 2
+                                          ? "Cannot delete (min 2 points required)"
+                                          : "Delete this point"}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                )}
 
                 <div className="flex gap-2">
                   <Button
@@ -282,6 +498,23 @@ export default function EditRouteControls({
                     Clear All
                   </Button>
                 </div>
+
+                {/* Quick Stats */}
+                {editPoints.length >= 2 && (
+                  <div className="rounded-lg bg-muted/50 p-2 space-y-1">
+                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Route Info</p>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground">Start: </span>
+                        <span className="font-mono">{editPoints[0].lat.toFixed(4)}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">End: </span>
+                        <span className="font-mono">{editPoints[editPoints.length - 1].lat.toFixed(4)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </TabsContent>
               
               <TabsContent value="details" className="space-y-3 mt-3">
@@ -364,21 +597,11 @@ export default function EditRouteControls({
                       <SelectValue placeholder="Select difficulty..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {difficultyLevels.length > 0 ? (
-                        difficultyLevels.map((d) => (
-                          <SelectItem key={d} value={d}>
-                            {d.charAt(0) + d.slice(1).toLowerCase().replace("_", " ")}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <>
-                          <SelectItem value="EASY">Easy</SelectItem>
-                          <SelectItem value="MODERATE">Moderate</SelectItem>
-                          <SelectItem value="HARD">Hard</SelectItem>
-                          <SelectItem value="VERY_HARD">Very Hard</SelectItem>
-                          <SelectItem value="EXTREME">Extreme</SelectItem>
-                        </>
-                      )}
+                      <SelectItem value="EASY">Easy</SelectItem>
+                      <SelectItem value="MODERATE">Moderate</SelectItem>
+                      <SelectItem value="HARD">Hard</SelectItem>
+                      <SelectItem value="VERY_HARD">Very Hard</SelectItem>
+                      <SelectItem value="EXTREME">Extreme</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

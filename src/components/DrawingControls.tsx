@@ -267,21 +267,11 @@ export default function DrawingControls({
                     <SelectValue placeholder="Select difficulty..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {difficultyLevels.length > 0 ? (
-                      difficultyLevels.map((d) => (
-                        <SelectItem key={d} value={d}>
-                          {d.charAt(0) + d.slice(1).toLowerCase().replace("_", " ")}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <>
-                        <SelectItem value="EASY">Easy</SelectItem>
-                        <SelectItem value="MODERATE">Moderate</SelectItem>
-                        <SelectItem value="HARD">Hard</SelectItem>
-                        <SelectItem value="VERY_HARD">Very Hard</SelectItem>
-                        <SelectItem value="EXTREME">Extreme</SelectItem>
-                      </>
-                    )}
+                    <SelectItem value="EASY">Easy</SelectItem>
+                    <SelectItem value="MODERATE">Moderate</SelectItem>
+                    <SelectItem value="HARD">Hard</SelectItem>
+                    <SelectItem value="VERY_HARD">Very Hard</SelectItem>
+                    <SelectItem value="EXTREME">Extreme</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

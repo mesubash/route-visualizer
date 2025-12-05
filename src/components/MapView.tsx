@@ -21,6 +21,7 @@ interface MapViewProps {
   isEditing?: boolean;
   editPoints?: Coordinates[];
   onEditPointDrag?: (index: number, coords: Coordinates) => void;
+  focusedPointIndex?: number | null;
 }
 
 export default function MapView({
@@ -34,6 +35,7 @@ export default function MapView({
   isEditing = false,
   editPoints = [],
   onEditPointDrag,
+  focusedPointIndex,
 }: MapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -122,37 +124,146 @@ export default function MapView({
     editMarkersRef.current = [];
 
     if (isEditing && editPoints.length > 0) {
-      // Add draggable markers for each point
+      // Add draggable markers for each point with enhanced styling
       editPoints.forEach((point, index) => {
+        const isFirst = index === 0;
+        const isLast = index === editPoints.length - 1;
+        const pointColor = isFirst ? '#22c55e' : isLast ? '#ef4444' : '#8b5cf6';
+        const pointLabel = isFirst ? 'S' : isLast ? 'E' : String(index + 1);
+
         const marker = L.marker([point.lat, point.lng], {
           draggable: true,
           icon: L.divIcon({
             className: "edit-marker",
-            html: `<div style="background-color: ${index === 0 ? '#22c55e' : index === editPoints.length - 1 ? '#ef4444' : '#8b5cf6'}; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3); cursor: grab;"></div>`,
-            iconSize: [16, 16],
-            iconAnchor: [8, 8],
+            html: `
+              <div style="
+                position: relative;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+              ">
+                <div style="
+                  background-color: ${pointColor};
+                  width: 24px;
+                  height: 24px;
+                  border-radius: 50%;
+                  border: 3px solid white;
+                  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+                  cursor: grab;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  font-size: 10px;
+                  font-weight: bold;
+                  color: white;
+                  font-family: system-ui, -apple-system, sans-serif;
+                ">${pointLabel}</div>
+                <div style="
+                  position: absolute;
+                  top: -8px;
+                  right: -8px;
+                  background: white;
+                  border-radius: 4px;
+                  padding: 1px 4px;
+                  font-size: 8px;
+                  font-weight: 600;
+                  color: ${pointColor};
+                  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+                  white-space: nowrap;
+                ">${isFirst ? 'START' : isLast ? 'END' : `#${index + 1}`}</div>
+              </div>
+            `,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
           }),
         }).addTo(map);
+
+        // Add tooltip with coordinates
+        marker.bindTooltip(
+          `<div style="font-size: 10px; font-family: monospace;">
+            <strong>${isFirst ? 'Start Point' : isLast ? 'End Point' : `Point ${index + 1}`}</strong><br/>
+            Lat: ${point.lat.toFixed(6)}<br/>
+            Lng: ${point.lng.toFixed(6)}
+          </div>`,
+          { direction: 'top', offset: [0, -15] }
+        );
+
+        marker.on("dragstart", () => {
+          const el = marker.getElement();
+          if (el) {
+            el.style.cursor = 'grabbing';
+            el.style.zIndex = '10000';
+          }
+        });
 
         marker.on("dragend", () => {
           const latlng = marker.getLatLng();
           onEditPointDrag?.(index, { lat: latlng.lat, lng: latlng.lng });
+          const el = marker.getElement();
+          if (el) {
+            el.style.cursor = 'grab';
+          }
         });
 
         editMarkersRef.current.push(marker);
       });
 
-      // Draw polyline
+      // Draw polyline with gradient effect
       if (editPoints.length > 1) {
         const coords: L.LatLngExpression[] = editPoints.map((p) => [p.lat, p.lng]);
         editLayerRef.current = L.polyline(coords, {
           color: "#8b5cf6",
           weight: 4,
           opacity: 0.9,
+          lineCap: 'round',
+          lineJoin: 'round',
         }).addTo(map);
+
+        // Add direction arrows on the polyline
+        for (let i = 0; i < editPoints.length - 1; i++) {
+          const start = editPoints[i];
+          const end = editPoints[i + 1];
+          const midLat = (start.lat + end.lat) / 2;
+          const midLng = (start.lng + end.lng) / 2;
+
+          // Calculate angle for arrow
+          const angle = Math.atan2(end.lat - start.lat, end.lng - start.lng) * (180 / Math.PI);
+
+          const arrowMarker = L.marker([midLat, midLng], {
+            icon: L.divIcon({
+              className: 'route-arrow',
+              html: `<div style="
+                transform: rotate(${90 - angle}deg);
+                color: #8b5cf6;
+                font-size: 14px;
+                text-shadow: 0 0 2px white, 0 0 2px white;
+              ">▲</div>`,
+              iconSize: [14, 14],
+              iconAnchor: [7, 7],
+            }),
+            interactive: false,
+          }).addTo(map);
+
+          // Store arrow markers for cleanup (reuse editMarkersRef)
+          editMarkersRef.current.push(arrowMarker);
+        }
       }
     }
   }, [isEditing, editPoints, onEditPointDrag]);
+
+  // Handle focused point (pan to it)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || focusedPointIndex === null || focusedPointIndex === undefined) return;
+
+    const point = editPoints[focusedPointIndex];
+    if (point) {
+      map.setView([point.lat, point.lng], Math.max(map.getZoom(), 14), {
+        animate: true,
+        duration: 0.5,
+      });
+    }
+  }, [focusedPointIndex, editPoints]);
 
   // Update drawn route
   useEffect(() => {

@@ -28,6 +28,7 @@ export interface RouteCreateOptions {
   description?: string;
   trekName?: string;
   durationDays?: number;
+  coordinates?: Coordinates[]; // Optional: if provided, use these instead of points parameter
 }
 
 // Options for the useRoutes hook
@@ -176,7 +177,14 @@ export function useRoutes(options?: UseRoutesOptions): UseRoutesReturn {
         description,
         trekName,
         durationDays,
+        coordinates: optionCoordinates,
       } = options;
+
+      // Use coordinates from options if provided, otherwise use points parameter
+      const routePoints =
+        optionCoordinates && optionCoordinates.length > 0
+          ? optionCoordinates
+          : points;
 
       // Check if authenticated for API call
       if (!isAuthenticated()) {
@@ -192,7 +200,7 @@ export function useRoutes(options?: UseRoutesOptions): UseRoutesReturn {
 
       // Make API call to create route
       try {
-        const distance = calculateDistance(points);
+        const distance = calculateDistance(routePoints);
         const routeRequest: RouteRequest = {
           name,
           region,
@@ -200,7 +208,7 @@ export function useRoutes(options?: UseRoutesOptions): UseRoutesReturn {
           maxAltitude,
           difficultyLevel,
           distanceKm: distance / 1000,
-          geometryCoordinates: points.map(
+          geometryCoordinates: routePoints.map(
             (p) => [p.lng, p.lat] as [number, number]
           ),
           description,

@@ -5,6 +5,7 @@ import RouteInfoOverlay from "@/components/RouteInfoOverlay";
 import RouteDetailsPanel from "@/components/RouteDetailsPanel";
 import RouteList from "@/components/RouteList";
 import DrawingControls from "@/components/DrawingControls";
+import GeoJSONImportControls from "@/components/GeoJSONImportControls";
 import EditRouteControls from "@/components/EditRouteControls";
 import SearchFilterPanel from "@/components/SearchFilterPanel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,7 +42,11 @@ const Index = () => {
     clearRoutes,
   } = useRoutes({ onAuthRequired: openLoginDialog });
 
-  // Drawing state
+  // Import state (for GeoJSON import)
+  const [isImporting, setIsImporting] = useState(false);
+  const [previewCoordinates, setPreviewCoordinates] = useState<Coordinates[]>([]);
+
+  // Drawing state (for manual drawing on map)
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawnPoints, setDrawnPoints] = useState<Coordinates[]>([]);
   const [routeName, setRouteName] = useState("");
@@ -87,15 +92,51 @@ const Index = () => {
     }
   }, [isDrawing, isEditing]);
 
+  // Import handlers
+  const handleToggleImport = useCallback(() => {
+    if (isEditing || isDrawing) return;
+    setIsImporting((prev) => !prev);
+    if (isImporting) {
+      setPreviewCoordinates([]);
+    }
+  }, [isImporting, isEditing, isDrawing]);
+
+  const handlePreviewCoordinates = useCallback((coordinates: Coordinates[]) => {
+    setPreviewCoordinates(coordinates);
+  }, []);
+
+  const handleClearPreview = useCallback(() => {
+    setPreviewCoordinates([]);
+  }, []);
+
+  const handleSaveRoute = useCallback(
+    async (options: RouteCreateOptions) => {
+      // Use coordinates from options (populated by GeoJSONImportControls)
+      const coordinates = options.coordinates || [];
+      if (coordinates.length < 2 || !options.name.trim()) return;
+
+      const success = await addRoute([], options); // Pass empty array, coordinates are in options
+      if (success) {
+        toast({
+          title: "Route Created",
+          description: `"${options.name}" has been added to your routes.`,
+        });
+        setIsImporting(false);
+        setPreviewCoordinates([]);
+      }
+    },
+    [addRoute]
+  );
+
   // Drawing handlers
   const handleToggleDrawing = useCallback(() => {
-    if (isEditing) return; // Don't allow drawing while editing
+    if (isEditing || isImporting) return;
     setIsDrawing((prev) => !prev);
     if (isDrawing) {
       setDrawnPoints([]);
       setRouteName("");
     }
-  }, [isDrawing, isEditing]);
+  }, [isDrawing, isEditing, isImporting]);
 
   const handleClearPoints = useCallback(() => {
     setDrawnPoints([]);
@@ -105,34 +146,38 @@ const Index = () => {
     setDrawnPoints((prev) => prev.slice(0, -1));
   }, []);
 
-  const handleSaveRoute = useCallback(
+  const handleSaveDrawnRoute = useCallback(
     async (options: RouteCreateOptions) => {
       if (drawnPoints.length < 2 || !options.name.trim()) return;
 
-      const success = await addRoute(drawnPoints, options);
+      const optionsWithCoordinates = {
+        ...options,
+        coordinates: drawnPoints,
+      };
+
+      const success = await addRoute(drawnPoints, optionsWithCoordinates);
       if (success) {
         toast({
           title: "Route Created",
           description: `"${options.name}" has been added to your routes.`,
         });
+        setIsDrawing(false);
+        setDrawnPoints([]);
+        setRouteName("");
       }
-
-      setIsDrawing(false);
-      setDrawnPoints([]);
-      setRouteName("");
     },
-    [drawnPoints, addRoute]
+    [addRoute, drawnPoints]
   );
 
   // Editing handlers
   const handleStartEdit = useCallback(() => {
-    if (!selectedRoute || isDrawing) return;
+    if (!selectedRoute || isImporting || isDrawing) return;
     const points: Coordinates[] = selectedRoute.geometry.coordinates.map(
       ([lng, lat]) => ({ lat, lng })
     );
     setEditPoints(points);
     setIsEditing(true);
-  }, [selectedRoute, isDrawing]);
+  }, [selectedRoute, isImporting, isDrawing]);
 
   const handleCancelEdit = useCallback(() => {
     setIsEditing(false);
@@ -171,6 +216,43 @@ const Index = () => {
       newPoints[index] = coords;
       return newPoints;
     });
+  }, []);
+
+  const handleUpdatePoint = useCallback((index: number, coords: Coordinates) => {
+    setEditPoints((prev) => {
+      const newPoints = [...prev];
+      newPoints[index] = coords;
+      return newPoints;
+    });
+  }, []);
+
+  const handleDeletePoint = useCallback((index: number) => {
+    setEditPoints((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleInsertPoint = useCallback((index: number, coords: Coordinates) => {
+    setEditPoints((prev) => {
+      const newPoints = [...prev];
+      newPoints.splice(index, 0, coords);
+      return newPoints;
+    });
+  }, []);
+
+  const handleMovePoint = useCallback((fromIndex: number, toIndex: number) => {
+    setEditPoints((prev) => {
+      const newPoints = [...prev];
+      const [movedPoint] = newPoints.splice(fromIndex, 1);
+      newPoints.splice(toIndex, 0, movedPoint);
+      return newPoints;
+    });
+  }, []);
+
+  const [focusedPointIndex, setFocusedPointIndex] = useState<number | null>(null);
+
+  const handleFocusPoint = useCallback((index: number) => {
+    setFocusedPointIndex(index);
+    // Reset focus after a short delay to allow the map to pan
+    setTimeout(() => setFocusedPointIndex(null), 100);
   }, []);
 
   const handleDeleteRoute = useCallback(async () => {
@@ -309,16 +391,25 @@ const Index = () => {
 
               {/* Create Tab */}
               <TabsContent value="create" className="m-0 p-4 space-y-4">
+                {/* Import Route Section */}
+                <GeoJSONImportControls
+                  isImporting={isImporting}
+                  onToggleImport={handleToggleImport}
+                  onSaveRoute={handleSaveRoute}
+                  onPreviewCoordinates={handlePreviewCoordinates}
+                  onClearPreview={handleClearPreview}
+                />
+
                 {/* Draw Route Section */}
                 <DrawingControls
                   isDrawing={isDrawing}
                   drawnPoints={drawnPoints}
                   routeName={routeName}
+                  onRouteNameChange={setRouteName}
                   onToggleDrawing={handleToggleDrawing}
                   onClearPoints={handleClearPoints}
-                  onSaveRoute={handleSaveRoute}
-                  onRouteNameChange={setRouteName}
                   onUndoLastPoint={handleUndoLastPoint}
+                  onSaveRoute={handleSaveDrawnRoute}
                 />
 
                 {/* Edit Route Section */}
@@ -332,7 +423,12 @@ const Index = () => {
                   onDeleteRoute={handleDeleteRoute}
                   onUndoPoint={handleEditUndoPoint}
                   onClearPoints={handleEditClearPoints}
-                  hasSelectedRoute={!!selectedRoute && !isDrawing}
+                  onUpdatePoint={handleUpdatePoint}
+                  onDeletePoint={handleDeletePoint}
+                  onInsertPoint={handleInsertPoint}
+                  onMovePoint={handleMovePoint}
+                  onFocusPoint={handleFocusPoint}
+                  hasSelectedRoute={!!selectedRoute && !isImporting && !isDrawing}
                 />
               </TabsContent>
             </ScrollArea>
@@ -346,16 +442,17 @@ const Index = () => {
             selectedRoute={selectedRoute}
             origin={isEditing ? null : origin}
             destination={isEditing ? null : destination}
-            isDrawing={isDrawing}
-            drawnPoints={drawnPoints}
+            isDrawing={isDrawing || isImporting}
+            drawnPoints={isImporting ? previewCoordinates : drawnPoints}
             onMapClick={handleMapClick}
             isEditing={isEditing}
             editPoints={editPoints}
             onEditPointDrag={handleEditPointDrag}
+            focusedPointIndex={focusedPointIndex}
           />
 
           {/* Map overlay info */}
-          {routes.length === 0 && !isDrawing && (
+          {routes.length === 0 && !isImporting && !isDrawing && (
             <div className="absolute left-1/2 top-1/2 z-[1000] -translate-x-1/2 -translate-y-1/2 rounded-xl border bg-card/95 p-8 text-center shadow-2xl backdrop-blur-sm max-w-sm">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-primary/5">
                 <img src="/routeviz.png" alt="Route Visualizer" className="h-10 w-10" />
@@ -380,7 +477,7 @@ const Index = () => {
           )}
 
           {/* Route info overlay in top-right */}
-          {selectedRoute && !isDrawing && !isEditing && (
+          {selectedRoute && !isImporting && !isDrawing && !isEditing && (
             <RouteInfoOverlay route={selectedRoute} />
           )}
 
