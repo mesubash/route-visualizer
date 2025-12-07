@@ -361,6 +361,7 @@ export default function GeoJSONImportControls({
       description: description.trim() || undefined,
       trekName: trekName.trim() || undefined,
       durationDays: durationDays ? parseInt(durationDays) : undefined,
+      distanceKm: distanceKm ? parseFloat(distanceKm) : undefined,
       // Pass coordinates through the hook
       coordinates: combinedCoordinates,
     };

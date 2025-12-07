@@ -430,6 +430,9 @@ const Index = () => {
                   onFocusPoint={handleFocusPoint}
                   hasSelectedRoute={!!selectedRoute && !isImporting && !isDrawing}
                 />
+
+                {/* Bulk Import/Export Section */}
+                <RouteImportExport onImportComplete={handleFetchAllRoutes} />
               </TabsContent>
             </ScrollArea>
           </Tabs>

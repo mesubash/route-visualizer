@@ -283,12 +283,15 @@ export function useRoutes(options?: UseRoutesOptions): UseRoutesReturn {
       points: Coordinates[],
       options?: Partial<RouteCreateOptions>
     ): Promise<boolean> => {
-      const distance = calculateDistance(points);
+      const calculatedDistanceMeters = calculateDistance(points);
+      const calculatedDistanceKm = calculatedDistanceMeters / 1000;
+      const distanceKm = options?.distanceKm ?? calculatedDistanceKm;
+      const distanceMeters = distanceKm * 1000;
       const existingRoute = routes.find((r) => r.properties.id === routeId);
 
       // Check if this is a local route (allow updates to local routes without auth)
       if (routeId.startsWith("local-")) {
-        const duration = (distance / 1000) * 72;
+        const duration = options?.durationDays ?? distanceKm * 72;
         setRoutes((prev) =>
           prev.map((route) => {
             if (route.properties.id !== routeId) return route;
@@ -302,7 +305,7 @@ export function useRoutes(options?: UseRoutesOptions): UseRoutesReturn {
               },
               properties: {
                 ...route.properties,
-                distance,
+                distance: distanceMeters,
                 duration,
                 routeName: options?.name || route.properties.routeName,
                 roadType: options?.difficultyLevel || route.properties.roadType,
@@ -341,7 +344,7 @@ export function useRoutes(options?: UseRoutesOptions): UseRoutesReturn {
             },
             properties: {
               ...prev.properties,
-              distance,
+              distance: distanceMeters,
               duration,
               routeName: options?.name || prev.properties.routeName,
               roadType: options?.difficultyLevel || prev.properties.roadType,
@@ -379,6 +382,10 @@ export function useRoutes(options?: UseRoutesOptions): UseRoutesReturn {
 
       // Make API call to update route
       try {
+        // Use provided distanceKm or calculate from coordinates
+        const calculatedDistance = calculateDistance(points) / 1000;
+        const distanceKm = options?.distanceKm ?? calculatedDistance;
+
         const routeRequest: RouteRequest = {
           name:
             options?.name ||
@@ -394,7 +401,7 @@ export function useRoutes(options?: UseRoutesOptions): UseRoutesReturn {
             options?.difficultyLevel ||
             (existingRoute?.properties.roadType as DifficultyLevel) ||
             "MODERATE",
-          distanceKm: distance / 1000,
+          distanceKm,
           geometryCoordinates: points.map(
             (p) => [p.lng, p.lat] as [number, number]
           ),

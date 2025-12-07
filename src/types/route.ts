@@ -250,3 +250,58 @@ export function routeResponseToFeature(route: RouteResponse): RouteFeature {
     },
   };
 }
+
+// ============================================
+// Import/Export Types
+// ============================================
+
+// Route item for bulk import
+export interface RouteImportItem {
+  name: string;
+  region: string;
+  maxAltitude: number;
+  abbreviation?: string;
+  trekName?: string;
+  description?: string;
+  minAltitude?: number;
+  durationDays?: number;
+  distanceKm?: number;
+  difficultyLevel?: string;
+  geometryCoordinates?: number[][];
+  rescueCategoryCode?: string;
+  estimatedRescueCost?: number;
+  isActive?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+// Response from bulk import operations
+export interface BulkImportResponse {
+  importedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  totalProcessed: number;
+  message: string;
+  errors: string[];
+  warnings: string[];
+  importedRoutes: string[];
+}
+
+// Route data structure for exports
+export interface RouteExportData {
+  id: string;
+  name: string;
+  abbreviation?: string;
+  trekName?: string;
+  description?: string;
+  region: string;
+  minAltitude: number;
+  maxAltitude: number;
+  durationDays?: number;
+  distanceKm?: number;
+  difficultyLevel?: string;
+  geometryCoordinates?: number[][];
+  rescueCategoryCode?: string;
+  estimatedRescueCost?: number;
+  isActive: boolean;
+  metadata?: Record<string, unknown>;
+}

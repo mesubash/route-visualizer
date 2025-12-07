@@ -13,6 +13,9 @@ import {
   RouteImportResponse,
   DifficultyLevel,
   routeResponseToFeature,
+  RouteImportItem,
+  BulkImportResponse,
+  RouteExportData,
 } from "@/types/route";
 import { getAuthHeaders } from "@/lib/auth";
 
@@ -1067,4 +1070,137 @@ export function createRouteRequest(
     distanceKm: options.distanceKm,
     isActive: true,
   };
+}
+
+// ============================================
+// ROUTE EXPORT/IMPORT ENDPOINTS (Admin only)
+// ============================================
+
+/**
+ * Export all routes as JSON
+ * GET /api/admin/routes/export
+ */
+export async function exportRoutesAsJson(): Promise<ApiResponse<RouteExportData[]>> {
+  const response = await fetch(`${ADMIN_ROUTES_API}/export`, {
+    headers: {
+      ...getAuthHeaders(),
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Export failed');
+  }
+
+  return response.json();
+}
+
+/**
+ * Export all routes as GeoJSON
+ * GET /api/admin/routes/export/geojson
+ */
+export async function exportRoutesAsGeoJson(): Promise<ApiResponse<unknown>> {
+  const response = await fetch(`${ADMIN_ROUTES_API}/export/geojson`, {
+    headers: {
+      ...getAuthHeaders(),
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Export failed');
+  }
+
+  return response.json();
+}
+
+/**
+ * Export all routes as Excel file (downloads the file)
+ * GET /api/admin/routes/export/excel
+ */
+export async function exportRoutesAsExcel(): Promise<void> {
+  const response = await fetch(`${ADMIN_ROUTES_API}/export/excel`, {
+    headers: {
+      ...getAuthHeaders(),
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Export failed');
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `routes_export_${new Date().toISOString().split('T')[0]}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+}
+
+/**
+ * Import routes from GeoJSON file
+ * POST /api/admin/routes/import/geojson
+ */
+export async function importRoutesFromGeoJson(
+  file: File
+): Promise<ApiResponse<BulkImportResponse>> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`${ADMIN_ROUTES_API}/import/geojson`, {
+    method: 'POST',
+    headers: {
+      ...getAuthHeaders(),
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Import failed');
+  }
+
+  return response.json();
+}
+
+/**
+ * Bulk import routes from JSON payload
+ * POST /api/admin/routes/import/bulk
+ */
+export async function bulkImportRoutesFromJson(
+  routes: RouteImportItem[]
+): Promise<ApiResponse<BulkImportResponse>> {
+  const response = await fetch(`${ADMIN_ROUTES_API}/import/bulk`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({ routes }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || 'Import failed');
+  }
+
+  return response.json();
+}
+
+/**
+ * Helper function to download a blob as a file
+ */
+export function downloadBlob(blob: Blob, filename: string): void {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
 }

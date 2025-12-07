@@ -81,6 +81,8 @@ export default function EditRouteControls({
   const [editTrekName, setEditTrekName] = useState("");
   const [editMinAltitude, setEditMinAltitude] = useState("");
   const [editMaxAltitude, setEditMaxAltitude] = useState("");
+  const [editDistanceKm, setEditDistanceKm] = useState("");
+  const [editDurationDays, setEditDurationDays] = useState("");
   const [editDifficulty, setEditDifficulty] = useState<DifficultyLevel>("MODERATE");
   const [editDescription, setEditDescription] = useState("");
   const [activeEditTab, setActiveEditTab] = useState<"points" | "details">("points");
@@ -142,6 +144,8 @@ export default function EditRouteControls({
       setEditTrekName(selectedRoute.properties.trekName || "");
       setEditMinAltitude(selectedRoute.properties.minAltitude?.toString() || "");
       setEditMaxAltitude(selectedRoute.properties.maxAltitude?.toString() || "");
+      setEditDistanceKm(selectedRoute.properties.distance ? (selectedRoute.properties.distance / 1000).toFixed(2) : "");
+      setEditDurationDays(selectedRoute.properties.duration?.toString() || "");
       setEditDifficulty((selectedRoute.properties.roadType as DifficultyLevel) || "MODERATE");
       setEditDescription(selectedRoute.properties.description || "");
     }
@@ -153,6 +157,8 @@ export default function EditRouteControls({
       region: editRegion || undefined,
       minAltitude: editMinAltitude ? parseInt(editMinAltitude) : undefined,
       maxAltitude: editMaxAltitude ? parseInt(editMaxAltitude) : undefined,
+      distanceKm: editDistanceKm ? parseFloat(editDistanceKm) : undefined,
+      durationDays: editDurationDays ? parseInt(editDurationDays) : undefined,
       difficultyLevel: editDifficulty,
       description: editDescription || undefined,
       trekName: editTrekName || undefined,
@@ -589,7 +595,33 @@ export default function EditRouteControls({
                     />
                   </div>
                 </div>
-                
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="editDistanceKm" className="text-xs">Distance (km)</Label>
+                    <Input
+                      id="editDistanceKm"
+                      type="number"
+                      step="0.1"
+                      value={editDistanceKm}
+                      onChange={(e) => setEditDistanceKm(e.target.value)}
+                      placeholder="e.g. 130.5"
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="editDurationDays" className="text-xs">Duration (days)</Label>
+                    <Input
+                      id="editDurationDays"
+                      type="number"
+                      value={editDurationDays}
+                      onChange={(e) => setEditDurationDays(e.target.value)}
+                      placeholder="e.g. 14"
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="editDifficulty" className="text-xs">Difficulty</Label>
                   <Select value={editDifficulty} onValueChange={(v) => setEditDifficulty(v as DifficultyLevel)}>

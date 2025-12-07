@@ -150,6 +150,7 @@ export default function DrawingControls({
       description: description.trim() || undefined,
       trekName: trekName.trim() || undefined,
       durationDays: durationDays ? parseInt(durationDays) : undefined,
+      distanceKm: distanceKm ? parseFloat(distanceKm) : undefined,
     };
     
     console.log("Saving route with options:", options);
