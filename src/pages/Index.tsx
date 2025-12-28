@@ -6,6 +6,7 @@ import RouteDetailsPanel from "@/components/RouteDetailsPanel";
 import RouteList from "@/components/RouteList";
 import DrawingControls from "@/components/DrawingControls";
 import GeoJSONImportControls from "@/components/GeoJSONImportControls";
+import RouteImportExport from "@/components/RouteImportExport";
 import EditRouteControls from "@/components/EditRouteControls";
 import SearchFilterPanel from "@/components/SearchFilterPanel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
